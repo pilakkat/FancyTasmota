@@ -17,6 +17,8 @@ All notable changes to this project will be documented in this file.
 - Show Active Power Total with any multi-phase energy monitoring (#22579)
 - Command `SetOption162 1` to disable adding export energy to energy today (#22578)
 - ESP32 support for WPA2/3 Enterprise conditional in core v3.1.0.241206 (#22600)
+- Support for Sonoff POWCT Energy Export Active (#22596)
+- Improved auto-selection of LED hardware support (RMT, SPI)
 
 ### Breaking Changed
 - ESP32 ArtNet switches from GRB to RGB encoding (#22556)
@@ -28,6 +30,7 @@ All notable changes to this project will be documented in this file.
 - Prevent active BLE operations with unencrypted MI-format beacons (#22453)
 - ESP32 replaced NeoPixelBus with TasmotaLED (#22556)
 - ESP32 Platform from 2024.11.31 to 2024.12.30, Framework (Arduino Core) from v3.1.0.241117 to v3.1.0.241206 and IDF to 5.3.2 (#22600)
+- RG-15 sensor name from RG-15 to RG15 (#22612)
 
 ### Fixed
 - ESP32 upgrade by file upload response based on file size (#22500)
@@ -39,6 +42,7 @@ All notable changes to this project will be documented in this file.
 - ESP32-C2 TasmotaLED from not present I2S to SPI (#22575)
 - KNX Scenes index change regression from v14.2.0.4 (#22405)
 - Add GUI submenu headers and refresh configuration button text (#22592)
+- ESP8266 Device Group exception due to lack of stack space (#22271)
 
 ### Removed
 
