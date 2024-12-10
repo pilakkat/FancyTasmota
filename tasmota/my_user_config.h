@@ -1408,4 +1408,17 @@
 #define USE_TIMEREXP_COMMANDS //issues special commands 'TimerEvent x' natively (no script required)
 #define USE_SOFTNERCTL
 
+#ifdef USE_SOFTNERCTL
+#ifndef USE_TIMEREXP_COMMANDS
+#define USE_TIMEREXP_COMMANDS
+#endif
+#ifdef ESP8266
+#define USER_TEMPLATE "{\"NAME\":\"Valve Controls\",\"GPIO\":[192,0,320,11040,11008,352,0,0,225,226,224,227,0,4704],\"FLAG\":0,\"BASE\":18}"
+#endif
+#else
+#ifdef ESP8266
+#define USER_TEMPLATE "{\"NAME\":\"Wemos D1 4N V1.0\",\"GPIO\":[195,0,0,0,194,193,0,0,225,226,224,227,192,0],\"FLAG\":0,\"BASE\":18}" 
+#endif
+#endif
+
 #endif  // _MY_USER_CONFIG_H_
