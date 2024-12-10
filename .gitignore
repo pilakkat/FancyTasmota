@@ -50,3 +50,4 @@ lib/libesp32/berry/berry
 ## Python virtual environments for Platformio ##
 venv
 .venv
+.vscode/extensions.json
