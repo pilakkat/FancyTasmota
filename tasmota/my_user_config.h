@@ -1405,4 +1405,6 @@
   #define USE_I2S_AUDIO_BERRY
 #endif // USE_I2S_ALL
 
+#define USE_TIMEREXP_COMMANDS //issues special commands 'TimerEvent x' natively (no script required)
+
 #endif  // _MY_USER_CONFIG_H_
