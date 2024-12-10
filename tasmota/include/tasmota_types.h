@@ -602,7 +602,12 @@ typedef struct {
   myio          my_gp;                     // 3AC  2x18 bytes (ESP8266) / 2x40 bytes (ESP32) / 2x21 bytes (ESP32-C2) / 2x22 bytes (ESP32-C3) / 2x31 bytes (ESP32-C6) / 2x47 bytes (ESP32-S2)
 #ifdef ESP8266
   uint16_t      gpio16_converted;          // 3D0
+#ifdef USE_SOFTNERCTL
+  uint8_t       free_esp8266_3D2[29];      // 3D2
+  uint8_t       garden_routines[13];       // 3EF (3 relays x 4 routines + 1 validity)
+#else
   uint8_t       free_esp8266_3D2[42];      // 3D2
+#endif
 #endif  // ESP8266
 #ifdef ESP32
   #if CONFIG_IDF_TARGET_ESP32C2
@@ -615,7 +620,26 @@ typedef struct {
 #endif  // ESP32
   mytmplt       user_template;             // 3FC  2x15 bytes (ESP8266) / 2x37 bytes (ESP32) / 2x22 bytes (ESP32-C2) / 2x23 bytes (ESP32-C3) / 2x32 bytes (ESP32-C6) / 2x37 bytes (ESP32-S2)
 #ifdef ESP8266
+#ifdef USE_SOFTNERCTL 
+  uint8_t       free_gp_41C[2];            // 41A - to release 2byte gap
+  uint32_t      softner_flags;             // 41C
+  uint16_t      softner_totalvolume;       // 420
+  uint16_t      softner_offlimit;          // 422
+  uint16_t      softner_onlimit;           // 424
+  uint16_t      softner_maxon[4];          // 42C
+  uint16_t      softner_minoff[4];         // 434
+  uint16_t      softner_regenlimit;        // 436
+  uint16_t      softner_watervolume;       // 438
+  uint16_t      softner_tankvolume;        // 43A
+  uint16_t      softner_sensorlevels[3];   // 43C
+  uint16_t      softner_saltlevel;         // 442 
+  uint8_t       softner_deblim[4];         // 444 
+  uint8_t       softner_saltusage;         // 448
+  uint8_t       softner_saltcapacity;      // 449 
+  uint8_t       free_esp8266_448[7];       // 44A
+#else
   uint8_t       free_esp8266_41A[55];      // 41A
+#endif
 #endif  // ESP8266
 #ifdef ESP32
   #if CONFIG_IDF_TARGET_ESP32C2
