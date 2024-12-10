@@ -243,8 +243,13 @@ void SwitchInit(void) {
 #endif  // ESP32
       Switch.last_state[i] = digitalRead(Pin(GPIO_SWT1, i));  // Set global now so doesn't change the saved power state on first switch check
       if (ac_detect) {
-        Switch.state[i] = 0x80 + 2 * SWITCH_AC_PERIOD;
-        Switch.last_state[i] = 0;				 // Will set later in the debouncing code
+        if (bitRead(TasmotaGlobal.power,i)) {
+          Switch.state[i] = 0x80;
+          Switch.last_state[i] = 1;			 
+        } else {
+          Switch.state[i] = 0;
+          Switch.last_state[i] = 0;			 
+        }
       }
     }
     else {
