@@ -228,6 +228,9 @@ enum UserSelectablePins {
   GPIO_LD2410S_TX, GPIO_LD2410S_RX,     // HLK-LD2410S
   GPIO_I2C_SER_TX, GPIO_I2C_SER_RX,     // I2C via Serial using SC18IM704 protocol (xdrv74)
   GPIO_TM1640CLK, GPIO_TM1640DIN,       // TM1640 (16 x seven-segment LED controler)
+#ifdef USE_SOFTNERCTL
+  GPIO_TEMPTY, GPIO_TMED, GPIO_TFULL,
+#endif
   GPIO_SENSOR_END };
 
 // Error as warning to rethink GPIO usage with max 2045
@@ -503,6 +506,9 @@ const char kSensorNames[] PROGMEM =
   D_SENSOR_LD2410S_TX "|" D_SENSOR_LD2410S_RX "|"
   D_SENSOR_I2C_SER_TX "|" D_SENSOR_I2C_SER_RX "|"
   D_SENSOR_TM1640_CLK "|" D_SENSOR_TM1640_DIN "|"
+#ifdef USE_SOFTNERCTL
+  "Level Low|Level Medium|Level Full"
+#endif
   ;
 
 const char kSensorNamesFixed[] PROGMEM =
@@ -1232,6 +1238,12 @@ const uint16_t kGpioNiceList[] PROGMEM = {
 #ifdef USE_PIPSOLAR
   AGPIO(GPIO_PIPSOLAR_TX),                       // pipsolar inverter Serial interface
   AGPIO(GPIO_PIPSOLAR_RX),                       // pipsolar inverter Serial interface
+#endif
+
+#ifdef USE_SOFTNERCTL
+AGPIO(GPIO_TEMPTY),
+AGPIO(GPIO_TMED),
+AGPIO(GPIO_TFULL),
 #endif
 
 /*-------------------------------------------------------------------------------------------*\

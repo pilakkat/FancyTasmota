@@ -1406,5 +1406,6 @@
 #endif // USE_I2S_ALL
 
 #define USE_TIMEREXP_COMMANDS //issues special commands 'TimerEvent x' natively (no script required)
+#define USE_SOFTNERCTL
 
 #endif  // _MY_USER_CONFIG_H_
