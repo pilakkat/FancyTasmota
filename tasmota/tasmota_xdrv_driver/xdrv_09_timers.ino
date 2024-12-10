@@ -313,6 +313,11 @@ void TimerEverySecond(void)
           if (time == set_time) {
             if (xtimer.days & days) {
               Settings->timer[i].arm = xtimer.repeat;
+#ifdef USE_TIMEREXP_COMMANDS
+              char scmnd[20];
+              snprintf_P(scmnd, sizeof(scmnd), PSTR("TimerEvent %d"), i+1);
+              ExecuteCommand(scmnd, SRC_TIMER);        
+#endif
 #if defined(USE_RULES) || defined(USE_SCRIPT)
               if (POWER_BLINK == xtimer.power) {             // Blink becomes Rule disregarding device and allowing use of Backlog commands
                 Response_P(PSTR("{\"Clock\":{\"Timer\":%d}}"), i +1);
