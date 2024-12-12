@@ -102,7 +102,8 @@ enum SoftnerCtlParamFlags { //32bits
     TOPUPMODE=20, //topup feature enable state
     SALTLVL,    //validity
     SALTCAPAVALID,
-    SALTUSAGE
+    SALTUSAGE,
+    FLOWSENSCORFACTOR
 };
 
 struct SensorLocals {
@@ -428,7 +429,14 @@ void SoftnerCtlInit(void) {
 
     softnersensors.pulse[0]=0;
     softnersensors.pulse[1]=0;
-    softnerparams.charge_rate_factor=1;
+    
+
+    if (SOFTNER_FLAGS(FLOWSENSCORFACTOR)) {
+        float fsfactor = (float)(Settings->softner_flowsensfactor-127)/500.0; //+/- 0.255
+        softnerparams.charge_rate_factor = 1+fsfactor; //+/- 25%
+    } else {
+        softnerparams.charge_rate_factor=1;
+    }
     softnerparams.discharge_rate_factor=1;
     
     if (SOFTNER_FLAGS(TANKVOL)) {
@@ -1165,6 +1173,7 @@ void CmndSoftnerConfig() {
         7: tankcapacity      --> for % calculations
         [8,9,10]: sensor levels --> [low,mid,hi]
         [11,12,13]: salt marker --> [usage,marker volume,marker level]
+        14: sensor adjustment --> -/+ 25% from calibration table
     */        
     if (XdrvMailbox.data_len) {
         char argument[XdrvMailbox.data_len];
@@ -1295,6 +1304,17 @@ void CmndSoftnerConfig() {
                     softnersensors.salt_volume = newval*softnerparams.saltcapacity/100;                
                     bitSet(Settings->softner_flags,SALTLVL);
                 }
+            }
+
+            if (ArgC() >= 14) { // flow sensor adjustment factor. In -25 to +25%
+                float facadj = CharToFloat(ArgV(argument, 14));
+                if (facadj>=-25 && facadj<=25) 
+                {
+                    softnerparams.charge_rate_factor = 1+(facadj/100); 
+                    facadj = 127+facadj*5; // 2 - 252
+                    Settings->softner_flowsensfactor = (uint8_t)facadj;
+                    bitSet(Settings->softner_flags,FLOWSENSCORFACTOR);
+                }
             }         
         }
         ReadSoftnerConfig(false); 
@@ -1328,6 +1348,12 @@ void ReadSoftnerConfig(bool help) {
                             (uint16_t)(softnerparams.saltusage*1000),
                             (uint8_t)(softnersensors.salt_volume*100/softnerparams.saltcapacity));
 
+    float facadj = 0;
+    if (softnerparams.charge_rate_factor>=0.75 && softnerparams.charge_rate_factor<=1.25) {
+        facadj = 100*(softnerparams.charge_rate_factor-1);
+    }
+    ResponseAppend_P(PSTR(",\"flowadjfactor\":%d"),(int8_t)facadj);
+
     /* Ipo values */
     /* ResponseAppend_P(PSTR(",\"sensTX\":[%s,%s,%s,%s,%s],sensTZ\":[%s,%s,%s,%s,%s]"),
                         F2Str(softnerparams.ctPulsePerLNorm_T[1]),F2Str(softnerparams.ctPulsePerLNorm_T[2]),F2Str(softnerparams.ctPulsePerLNorm_T[3]),
@@ -1337,7 +1363,7 @@ void ReadSoftnerConfig(bool help) {
     ResponseJsonEnd();
     MqttPublishPrefixTopic_P(STAT, PSTR("SOFTNERCONF"), Settings->flag5.mqtt_state_retain);
     if(help) {
-        Response_P(PSTR("{\"%s\":{\"Usage\":\"SoftnerConf automode(0|1|2), [maxon:<1800, minoff<3600], [autoon:20-80, autooff:75-100], regen:1k-5k, tankvol:500-5K, [sensorlow ,sensormed, sensorhigh]:in L, [salt_usage,marker_vol - in g,marker_level in %]\"}}"), XdrvMailbox.command);
+        Response_P(PSTR("{\"%s\":{\"Usage\":\"SoftnerConf automode(0|1|2), [maxon:<1800, minoff<3600], [autoon:20-80, autooff:75-100], regen:1k-5k, tankvol:500-5K, [sensorlow ,sensormed, sensorhigh]:in L, [salt_usage,marker_vol - in g,marker_level in %%], [flowadjustment:-25 to 25%%]\"}}"), XdrvMailbox.command);
     }
 }
 

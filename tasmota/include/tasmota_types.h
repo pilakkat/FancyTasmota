@@ -636,7 +636,8 @@ typedef struct {
   uint8_t       softner_deblim[4];         // 444 
   uint8_t       softner_saltusage;         // 448
   uint8_t       softner_saltcapacity;      // 449 
-  uint8_t       free_esp8266_448[7];       // 44A
+  uint8_t       softner_flowsensfactor;    // 44A
+  uint8_t       free_esp8266_448[6];       // 44B
 #else
   uint8_t       free_esp8266_41A[55];      // 41A
 #endif
