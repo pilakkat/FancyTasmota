@@ -3,7 +3,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - Development
 
-## [14.3.0.7] 
+## [14.4.0.1] 
+### Added
+- MCP23XXX_DRV control register IOCON in template (#22622)
+
+### Breaking Changed
+
+### Changed
+- Berry make Leds animate calls reentrant (#22643)
+- SSL clean up remnants of old fingerprint algorithm (#22645)
+
+### Fixed
+- ESP32 rules operation priority regression from v13.3.0.4 (#22636)
+- GUI display power button regression from v14.3.0.5 (#15788)
+- MCP23xxx, PCF8574 and Shift595 power control when a display is configured regression from v14.3.0.7
+
+### Removed
+
+
+## [Released]
+
+## [14.4.0] 20241211
+- Release Rudolph
+
+## [14.3.0.7] 20241211
 ### Added
 - Support for TM1640 based IoTTimer by Stefan Oskamp (#21376)
 - Command `SetOption161 1` to disable display of state text (#22515)
@@ -18,7 +41,7 @@ All notable changes to this project will be documented in this file.
 - Command `SetOption162 1` to disable adding export energy to energy today (#22578)
 - ESP32 support for WPA2/3 Enterprise conditional in core v3.1.0.241206 (#22600)
 - Support for Sonoff POWCT Energy Export Active (#22596)
-- Improved auto-selection of LED hardware support (RMT, SPI)
+- Improved auto-selection of LED hardware support (RMT, SPI) (#22618)
 
 ### Breaking Changed
 - ESP32 ArtNet switches from GRB to RGB encoding (#22556)
@@ -43,8 +66,6 @@ All notable changes to this project will be documented in this file.
 - KNX Scenes index change regression from v14.2.0.4 (#22405)
 - Add GUI submenu headers and refresh configuration button text (#22592)
 - ESP8266 Device Group exception due to lack of stack space (#22271)
-
-### Removed
 
 ## [14.3.0.6] 20241116
 ### Added
@@ -143,8 +164,6 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - EQ3 TRV firmware version 1.46 fails if the default true is used in subscribe on the notify characteristic (#22328)
-
-## [Released]
 
 ## [14.3.0] 20241015
 - Release Robert
