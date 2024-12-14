@@ -128,6 +128,7 @@ struct SensorLocals {
     uint8_t waterlevel_old=0;
     uint8_t relaystate_old;
     uint8_t relaylock;
+    uint8_t relaytimerevents; /* Single raster events: bit0-3: turnoff, bit4-7: locked */
     uint8_t dryruntimer;
     uint8_t errorstates_old=0;
     uint8_t errorstates=0;
@@ -137,9 +138,10 @@ struct SensorLocals {
     uint8_t routinestate=0; /* bit 0..2: activated via assigned routine, 
                             bit3..5: timeout active due to manual operation */
     uint8_t flowstate=(FLOWSTATEDEB<<2); /* bit 0: charge:1/discharge:0 (raw), bit 1: bit0 debouced, 2-7: timer (5sec debounce)*/
-    uint8_t valvestate = 0; /* bit0: last state, bit1: command accepted on last call, bit2: locked ON on last call, bit3: auto fill desired  */
+    uint8_t valvestate = 0; /* bit0: last state, bit1: command accepted on last call, bit2: locked ON on last call  */
     uint8_t filltries = 0;
-    uint8_t specialtimes = 0; /* bit0: regen inhibit, bit1: topup, bit4=bit0 old, bit5=bit1 processed */
+    uint8_t specialtimes = 0; /* bit0: regen inhibit, bit1: topup, bit4=bit0 old */
+    uint8_t filldes = 0; /* bit0: autofill hysteresis, bit1: topup request, bit2: external event, bit5=bit1 processed */
     bool flushstate_old;
     bool valid=false;
     bool tankfilling=false;
@@ -503,13 +505,15 @@ void InitTimeouts(uint8_t idx) {
 }
 
 void MonitorCountDown(void) {
-    for (uint8_t idx=0;idx<RELAY_BACK;idx++) {
+    softnersensors.relaytimerevents = 0;
+    for (uint8_t idx=RELAY_SOFTNER;idx<RELAY_BACK;idx++) {
         if(softnersensors.relay_countdown[idx]) { //timer active
             if(--softnersensors.relay_countdown[idx]==0) { //finished
-                if (bitRead(softnersensors.relaylock, idx)) { //lock timer
+                if (bitRead(softnersensors.relaylock, idx)) {//this is a lock timer
                     bitClear(softnersensors.relaylock, idx); //release lock
-                } else {  // off timer
+                } else {  //this is a turn-off timer
                     SetValveState(idx,false);
+                    bitSet(softnersensors.relaytimerevents, idx); //relay-auto-turnoff event
                 }
             }
         }
@@ -521,6 +525,10 @@ void MonitorCountDown(void) {
             if (state) { //turning on
                 softnersensors.relay_countdown[idx]=softnerparams.relay_limit[idx];
             } else {     //turning off
+                if (softnersensors.relay_countdown[idx]>0) {
+                    bitSet(softnersensors.relaytimerevents, idx+4); //turned off while count down happening
+                }
+
                 if(softnerparams.relay_minlock[idx]) { //min off time configured?
                     softnersensors.relay_countdown[idx]=softnerparams.relay_minlock[idx];
                     bitSet(softnersensors.relaylock, idx);
@@ -733,13 +741,13 @@ void ModelWaterDischarge(void) {
     }   
 }
 
-void CheckRegenWindow(void) {
+void CheckTimeWindow(void) {
     if (RtcTime.valid) {
         bitWrite(softnersensors.specialtimes,4,bitRead(softnersensors.specialtimes,0)); //bit4 = bit0_old
         
         bitWrite(softnersensors.specialtimes,0,(RtcTime.hour >= REGENLOCKSTART) && (RtcTime.hour <= REGENLOCKEND));                     //bit0 = regen window - no filling (12 - 6AM)
-        bitWrite(softnersensors.specialtimes,1,(RtcTime.hour == TOPUPHOUR));                   //bit21 = topup (10:00-10:59pm everyday)
-        if (!bitRead(softnersensors.specialtimes,1)) {bitClear(softnersensors.specialtimes,5);} //reset bit5 out of window
+        
+        bitWrite(softnersensors.specialtimes,1,(RtcTime.hour == TOPUPHOUR));  
     } else {
         softnersensors.specialtimes = 0;
     }
@@ -748,73 +756,108 @@ void CheckRegenWindow(void) {
 
 void WaterLevelController(void) {
     softnersensors.waterlevel = (uint8_t)((float)(softnersensors.watervolume*100/softnerparams.tank_volume)+0.5);
-
+    uint8_t eventid=0;
     /* Detect external actions */
-    if (GetValveState(RELAY_SOFTNER) != bitRead(softnersensors.valvestate,0)) {
-        if (bitRead(softnersensors.valvestate,1)) {// previous run was accepted
-            if(softnersensors.relay_countdown[RELAY_SOFTNER]>0 || GetValveState(RELAY_SOFTNER)) {
-                /* Changed while countdown is still active (possible only when on --> off externally) ||
-                   Turned on while counter is 0 (possible only when off --> on externally) */
-                if(GetValveState(RELAY_SOFTNER)) {
-                    bitSet(softnersensors.valvestate,0);
-                } else {
-                    bitClear(softnersensors.valvestate,0);
-                    bitClear(softnersensors.valvestate,3); // force stop hysteresis. prevents turning on after cooling period
-                }
-
-                softnersensors.dryrundebstate = softnersensors.dryrundebstate ^ DEB16MSK_PREVINP; // force restart debounce timer
-                softnersensors.dryrundebstate = softnersensors.dryrundebstate & ~DEB16MSK_DEBONCE; //force dryrun reevaluation via new event on debounce completion
-                Response_P(PSTR("{\"StateInfo\":\"%X\",\"StateTmr\":\"%X\"}"),softnersensors.dryrundebstate>>11,softnersensors.dryrundebstate&0xFFF);
-                MqttPublishPrefixTopic_P(STAT, PSTR("EXTEVENT"), Settings->flag5.mqtt_state_retain);
-            }
-        } else if (bitRead(softnersensors.valvestate,2) && GetValveState(RELAY_SOFTNER)) {
-            /* it was locked, but now turned on (only possible from external trigger) */
-            bitSet(softnersensors.valvestate,0);
-            softnersensors.dryrundebstate = softnersensors.dryrundebstate ^ DEB16MSK_PREVINP; // force restart debounce timer
-            softnersensors.dryrundebstate = softnersensors.dryrundebstate & ~DEB16MSK_DEBONCE; //force dryrun reevaluation via new event on debounce completion
-            Response_P(PSTR("{\"StateInfo\":\"%X\",\"StateTmr\":\"%X\"}"),softnersensors.dryrundebstate>>11,softnersensors.dryrundebstate&0xFFF);
-            MqttPublishPrefixTopic_P(STAT, PSTR("EXTLOCKOVRD"), Settings->flag5.mqtt_state_retain);
-        }
-    }
-
-    bool flgregeninhib = softnersensors.total_volume >= softnerparams.regenlimit;
-    bitWrite(softnersensors.errorstates,WARN_REGENLOCK,flgregeninhib);
-    bool flgfilldes = bitRead(softnersensors.valvestate,3) || bitRead(softnersensors.valvestate,0);     
-    /* Hysteresis for valve action. */ 
-    if (!softnersensors.tanklevelvalid || flgregeninhib || (softnersensors.watervolume >= softnerparams.offlimit)) {
-        flgfilldes = false;
-    } else if (softnersensors.watervolume < softnerparams.onlimit) {
-        flgfilldes = true;
-    }
-    bitWrite(softnersensors.valvestate,3,flgfilldes);
-
-     /*Lock & state checks are handled in calling function */
-    if (SOFTNER_FLAGS(AUTOMODE)) {               //automatic control active
-        if (flgfilldes &&                       //fill demand is active (even after auto off due to valve timer)
-            !softnersensors.abortfill)          //fill not aborted after multiple failed attempts    
-        {     
-            bitSet(softnersensors.valvestate,0);
-        } else if (!flgfilldes ||               //auto off request
-                    bitRead(softnersensors.specialtimes,0))  //tank fill is not allowed at this time
-        {               
-            bitClear(softnersensors.valvestate,0);     
-        } 
-        
-        if (SOFTNER_FLAGS(TOPUPMODE) &&                  //top-up option enabled
-            !bitRead(softnersensors.valvestate,0) &&     //not going to turn on
-            bitRead(softnersensors.specialtimes,1) &&    //topup window 
-            !bitRead(softnersensors.specialtimes,5))     //not handled yet      
-        {
-            /* Topup is enabled if level is at least 100L less than the auto-off limit */
-            if (softnersensors.tanklevelvalid && !softnersensors.abortfill &&  //pre-conditions 
-                !GetValveState(RELAY_SOFTNER) &&                //already not filling
-                softnersensors.watervolume < softnerparams.offlimit-100 && //limit satisfies
-                !bitRead(softnersensors.relaylock, RELAY_SOFTNER)) //relay lock not present
+    bitClear(softnersensors.filldes,2);
+    if (GetValveState(RELAY_SOFTNER) != bitRead(softnersensors.valvestate,0)) { //last desired != current state
+        if(GetValveState(RELAY_SOFTNER)) { 
+            if (bitRead(softnersensors.valvestate,1))                     // previous request was accepted
             {
-                bitSet(softnersensors.valvestate,0);
-                bitSet(softnersensors.specialtimes,5); //top-up only once
+                /* turned on after last call (OFF --> ON external event) */
+                eventid=11;
+                bitSet(softnersensors.filldes,2);
+            } 
+            else if (bitRead(softnersensors.valvestate,2)) 
+            {
+                /* it was locked, but now turned on (only possible from external trigger) */
+                bitSet(softnersensors.filldes,2);
+                eventid=12;
+            }
+        } else {
+            /* Changed from ON to OFF after last call */
+            if (bitRead(softnersensors.relaytimerevents, RELAY_SOFTNER+4))  //off event during countdown 
+            {
+                /* turned off, but not via auto-off = external event */
+                bitSet(softnersensors.filldes,2);
+                eventid=21;
             }
         }
+    }
+
+    /* Auto mode: Hysteresis for valve */ 
+    if (!softnersensors.tanklevelvalid || 
+        (softnersensors.watervolume >= softnerparams.offlimit) ||
+        eventid == 21) //externally turned off: stop further filling 
+    {
+        bitClear(softnersensors.filldes,0);
+    } 
+    else if (softnersensors.watervolume < softnerparams.onlimit || 
+            eventid == 11 || eventid == 12) //externally turned on
+    {
+        bitSet(softnersensors.filldes,0);
+    }
+    
+    /* Topup Window */
+    if (SOFTNER_FLAGS(TOPUPMODE) &&                                // Feature enabled
+        bitRead(softnersensors.specialtimes,1))                    // Topup window active
+    {
+        bitSet(softnersensors.filldes,1); //bit1 = topup  
+    } else {
+        softnersensors.filldes = softnersensors.filldes & 0b11011101; //bit 1 & 5 reset
+    }
+
+    bool flgregeninhib = softnersensors.total_volume >= softnerparams.regenlimit; // hard water limit reached
+    bitWrite(softnersensors.errorstates,WARN_REGENLOCK,flgregeninhib);
+
+    flgregeninhib = flgregeninhib || bitRead(softnersensors.specialtimes,0);      // regeneration window
+
+    /* EXTERNAL EVENT */
+    if (bitRead(softnersensors.filldes,2)) {
+        bitWrite(softnersensors.valvestate,0,GetValveState(RELAY_SOFTNER));
+        softnersensors.dryrundebstate = softnersensors.dryrundebstate ^ DEB16MSK_PREVINP; // force restart debounce timer
+        softnersensors.dryrundebstate = softnersensors.dryrundebstate & ~DEB16MSK_DEBONCE; //force dryrun reevaluation via new event on debounce completion
+        Response_P(PSTR("{\"EventId\":%d,\"StateInfo\":\"%X\",\"StateTmr\":\"%X\"}"),eventid,softnersensors.dryrundebstate>>11,softnersensors.dryrundebstate&0xFFF);
+        MqttPublishPrefixTopic_P(STAT, PSTR("EXTEVENT"), Settings->flag5.mqtt_state_retain);
+    }
+
+    /*Lock & state checks are handled in calling function */
+    if(!flgregeninhib) {
+        /* AUTO */
+        if(SOFTNER_FLAGS(AUTOMODE) &&            //automatic control enabled
+            bitRead(softnersensors.filldes,0) && //auto-fill request active
+            !softnersensors.abortfill)           //aborted due to multiple fails
+        {
+            eventid=31;
+            bitSet(softnersensors.valvestate,0);
+        } else if (!bitRead(softnersensors.filldes,0))
+        {
+            eventid=32;
+            bitClear(softnersensors.valvestate,0); 
+        }
+
+        /* TOPUP : Only when AUTO request not present */
+        if (!bitRead(softnersensors.valvestate,0) &&     //auto request not active
+            bitRead(softnersensors.filldes,1) &&         //topup request is active 
+            !bitRead(softnersensors.filldes,5))          //not processed yet     
+        {
+            if (!softnersensors.abortfill &&                               // No multi-attempt fails
+                softnersensors.watervolume < softnerparams.offlimit-100 && // Minimum 100L filling needed
+                !bitRead(softnersensors.relaylock, RELAY_SOFTNER) &&       // Relay lock not present 
+                !GetValveState(RELAY_SOFTNER))                             // Relay is not ON 
+            {
+                eventid=33;
+                bitSet(softnersensors.valvestate,0);
+                bitSet(softnersensors.filldes,0);                           //enable hysteresis 
+            }
+            else if (!bitSet(softnersensors.filldes,0)) 
+            {
+                eventid=34;
+                bitSet(softnersensors.filldes,5);                           // Finished topup
+            }
+        } 
+    } else {
+        eventid=35;
+        bitClear(softnersensors.valvestate,0); 
     }
     
     bool oldst = GetValveState(RELAY_SOFTNER);
@@ -823,18 +866,22 @@ void WaterLevelController(void) {
     bitWrite(softnersensors.valvestate,0,newst);
     bitWrite(softnersensors.valvestate,1,(newst == bitRead(softnersensors.valvestate,0))); 
     bitWrite(softnersensors.valvestate,2,bitRead(softnersensors.relaylock, RELAY_SOFTNER));
-    if (bitRead(softnersensors.valvestate,1)) { //not processed
+    if (bitRead(softnersensors.valvestate,1)) { //request not processed. if locked, show on sensor. 
         bitWrite(softnersensors.errorstates,WARN_MINLOCK,bitRead(softnersensors.relaylock, RELAY_SOFTNER));
     } else {
         bitClear(softnersensors.errorstates,WARN_MINLOCK);
     }
 
+    /* Activate dry-run timers for a new internal turn-on event */
     if (newst && !oldst) { //just turned on
         softnersensors.dryrundebstate = softnersensors.dryrundebstate ^ DEB16MSK_PREVINP;  
         softnersensors.dryrundebstate = softnersensors.dryrundebstate & ~DEB16MSK_DEBONCE;
-        Response_P(PSTR("{\"StateInfo\":\"%X\",\"StateTmr\":\"%X\"}"),softnersensors.dryrundebstate>>11,softnersensors.dryrundebstate&0xFFF);
-        MqttPublishPrefixTopic_P(STAT, PSTR("INTEVENT"), Settings->flag5.mqtt_state_retain);
-    } //for dry run reevaluation
+        Response_P(PSTR("{\"EventId\":%d,\"StateInfo\":\"%X\",\"StateTmr\":\"%X\"}"),eventid,softnersensors.dryrundebstate>>11,softnersensors.dryrundebstate&0xFFF);
+        MqttPublishPrefixTopic_P(STAT, PSTR("INTONEVENT"), Settings->flag5.mqtt_state_retain);
+    } else if (!newst && oldst) { //turned off
+        Response_P(PSTR("{\"EventId\":%d,\"StateInfo\":\"%X\",\"StateTmr\":\"%X\"}"),eventid,softnersensors.dryrundebstate>>11,softnersensors.dryrundebstate&0xFFF);
+        MqttPublishPrefixTopic_P(STAT, PSTR("INTOFFEVENT"), Settings->flag5.mqtt_state_retain);
+    }
 
     if (!GetValveState(RELAY_SOFTNER) && flgregeninhib) {
         //enforce lock for some time before reengaging autofill after a regen
@@ -855,6 +902,7 @@ void DryRunMonitor(void) {
         /* Continous flow of x LPM for > 10sec will clear DRYRUN fault */
         bitClear(softnersensors.errorstates,ERROR_DRYRUN);
         bitClear(softnersensors.errorstates,ERROR_DRYRUNPERM);
+        softnersensors.abortfill = false;
     } else if (GetValveState(RELAY_SOFTNER)) {
         /* Valve is open, but reporting dry */
         if ((softnersensors.dryrundebstate & DEB16MSK_NEWEVENT)!=0) {
@@ -1717,7 +1765,7 @@ bool Xsns120(uint32_t function) {
             RoutineMonitor();  
             WaterFlowSensor();
             ModelWaterDischarge();
-            CheckRegenWindow();
+            CheckTimeWindow();
             WaterLevelController();
             DryRunMonitor();
             result = true;
