@@ -863,12 +863,12 @@ void WaterLevelController(void) {
     bool oldst = GetValveState(RELAY_SOFTNER);
     SetValveState(RELAY_SOFTNER, bitRead(softnersensors.valvestate,0)); 
     bool newst = GetValveState(RELAY_SOFTNER); 
-    bitWrite(softnersensors.valvestate,0,newst);
     bitWrite(softnersensors.valvestate,1,(newst == bitRead(softnersensors.valvestate,0))); 
     bitWrite(softnersensors.valvestate,2,bitRead(softnersensors.relaylock, RELAY_SOFTNER));
-    if (bitRead(softnersensors.valvestate,1)) { //request not processed. if locked, show on sensor. 
+    bitWrite(softnersensors.valvestate,0,newst);
+    if (!bitRead(softnersensors.valvestate,1)) { //request not processed. if locked, show on sensor. 
         bitWrite(softnersensors.errorstates,WARN_MINLOCK,bitRead(softnersensors.relaylock, RELAY_SOFTNER));
-    } else {
+    } else { //lock doesn't matter
         bitClear(softnersensors.errorstates,WARN_MINLOCK);
     }
 
@@ -883,8 +883,10 @@ void WaterLevelController(void) {
         MqttPublishPrefixTopic_P(STAT, PSTR("INTOFFEVENT"), Settings->flag5.mqtt_state_retain);
     }
 
-    if (!GetValveState(RELAY_SOFTNER) && flgregeninhib) {
-        //enforce lock for some time before reengaging autofill after a regen
+    if (!GetValveState(RELAY_SOFTNER) && bitRead(softnersensors.errorstates,WARN_REGENLOCK)) {
+        /* enforce lock for some time before reengaging autofill after a regen limit lock is released.
+           this is required during manual regen out of regen time lock, else valve may open during 
+           ongoing reverse flush stage due to the reset of volume */
         softnersensors.relay_countdown[RELAY_SOFTNER]=WAITAFTERREGEN;
         bitSet(softnersensors.relaylock, RELAY_SOFTNER);
     }    
