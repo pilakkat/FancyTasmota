@@ -759,7 +759,7 @@ void WaterLevelController(void) {
     uint8_t eventid=0;
     /* Detect external actions */
     bitClear(softnersensors.filldes,2);
-    if (GetValveState(RELAY_SOFTNER) != bitRead(softnersensors.valvestate,0)) { //last desired != current state
+    if (GetValveState(RELAY_SOFTNER) != bitRead(softnersensors.valvestate,0)) { //last call state != current state
         if(GetValveState(RELAY_SOFTNER)) { 
             if (bitRead(softnersensors.valvestate,1))                     // previous request was accepted
             {
