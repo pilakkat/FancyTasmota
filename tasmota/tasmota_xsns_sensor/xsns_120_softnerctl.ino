@@ -836,11 +836,11 @@ void WaterLevelController(void) {
         }
 
         /* TOPUP : Only when AUTO request not present */
-        if (!bitRead(softnersensors.valvestate,0) &&     //auto request not active
-            bitRead(softnersensors.filldes,1) &&         //topup request is active 
+        if (bitRead(softnersensors.filldes,1) &&         //topup request is active 
             !bitRead(softnersensors.filldes,5))          //not processed yet     
         {
-            if (!softnersensors.abortfill &&                               // No multi-attempt fails
+            if (!bitRead(softnersensors.valvestate,0) &&                   //auto request not active
+                !softnersensors.abortfill &&                               // No multi-attempt fails
                 softnersensors.watervolume < softnerparams.offlimit-100 && // Minimum 100L filling needed
                 !bitRead(softnersensors.relaylock, RELAY_SOFTNER) &&       // Relay lock not present 
                 !GetValveState(RELAY_SOFTNER))                             // Relay is not ON 
