@@ -30,8 +30,8 @@
 #define SALTPERFLUSH               4.5 // salt usage: kg/regen 
 #define MINFLOWRATE                5
 #define SALTCAPACITY               50  // brine tank capacity: kg
-#define REGENLOCKSTART             1   //Start of REGEN LOCK - 1AM
-#define REGENLOCKEND               6   //REGEN LOCK Release - 6AM
+#define REGENLOCKSTART             1   //Start of REGEN LOCK - 1:00AM
+#define REGENLOCKEND               5   //REGEN LOCK Release - 5:59AM
 #define TOPUPHOUR                  22  //Hour window for tank fill up 
 
 /* DEB16 Masks */
