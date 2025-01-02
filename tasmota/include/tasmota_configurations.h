@@ -971,7 +971,7 @@
 #undef DEBUG_THEO                                // Disable debug code
 #undef USE_DEBUG_DRIVER                          // Disable debug code
 #undef USE_AC_ZERO_CROSS_DIMMER                  // Disable support for AC_ZERO_CROSS_DIMMER
-
+#undef USE_SOFTNERCTL
 #endif  // FIRMWARE_MINIMAL
 #endif  // ifndef FIRMWARE_MINICUSTOM
 
