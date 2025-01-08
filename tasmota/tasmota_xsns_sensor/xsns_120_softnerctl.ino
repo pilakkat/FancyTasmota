@@ -434,9 +434,11 @@ void SoftnerCtlInit(void) {
     
 
     if (SOFTNER_FLAGS(FLOWSENSCORFACTOR)) {
-        float fsfactor = (float)(Settings->softner_flowsensfactor-127)/500.0; //+/- 0.255
+        float fsfactor = (float)(Settings->softner_flowsensfactor/100.0);
         softnerparams.charge_rate_factor = 1+fsfactor; //+/- 25%
     } else {
+        Settings->softner_flowsensfactor = 0;
+        bitSet(Settings->softner_flags,FLOWSENSCORFACTOR);
         softnerparams.charge_rate_factor=1;
     }
     softnerparams.discharge_rate_factor=1;
@@ -745,7 +747,7 @@ void CheckTimeWindow(void) {
     if (RtcTime.valid) {
         bitWrite(softnersensors.specialtimes,4,bitRead(softnersensors.specialtimes,0)); //bit4 = bit0_old
         
-        bitWrite(softnersensors.specialtimes,0,(RtcTime.hour >= REGENLOCKSTART) && (RtcTime.hour <= REGENLOCKEND));                     //bit0 = regen window - no filling (12 - 6AM)
+            bitWrite(softnersensors.specialtimes,0,(RtcTime.hour >= REGENLOCKSTART) && (RtcTime.hour <= REGENLOCKEND));                     //bit0 = regen window - no filling (12 - 6AM)
         
         bitWrite(softnersensors.specialtimes,1,(RtcTime.hour == TOPUPHOUR));  
     } else {
@@ -1361,9 +1363,7 @@ void CmndSoftnerConfig() {
                 if (facadj>=-25 && facadj<=25) 
                 {
                     softnerparams.charge_rate_factor = 1+(facadj/100); 
-                    facadj = 127+facadj*5; // 2 - 252
-                    Settings->softner_flowsensfactor = (uint8_t)facadj;
-                    bitSet(Settings->softner_flags,FLOWSENSCORFACTOR);
+                    Settings->softner_flowsensfactor = (int8_t)facadj;
                 }
             }         
         }
@@ -1398,11 +1398,7 @@ void ReadSoftnerConfig(bool help) {
                             (uint16_t)(softnerparams.saltusage*1000),
                             (uint8_t)(softnersensors.salt_volume*100/softnerparams.saltcapacity));
 
-    float facadj = 0;
-    if (softnerparams.charge_rate_factor>=0.75 && softnerparams.charge_rate_factor<=1.25) {
-        facadj = 100*(softnerparams.charge_rate_factor-1);
-    }
-    ResponseAppend_P(PSTR(",\"flowadjfactor\":%d"),(int8_t)facadj);
+    ResponseAppend_P(PSTR(",\"flowadjfactor\":%d"),Settings->softner_flowsensfactor);
 
     /* Ipo values */
     /* ResponseAppend_P(PSTR(",\"sensTX\":[%s,%s,%s,%s,%s],sensTZ\":[%s,%s,%s,%s,%s]"),
