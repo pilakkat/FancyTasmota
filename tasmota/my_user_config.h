@@ -1419,7 +1419,7 @@
 #define USE_TIMEREXP_COMMANDS
 #endif
 #ifdef ESP8266
-#define USER_TEMPLATE "{\"NAME\":\"Valve Controls\",\"GPIO\":[192,0,320,11040,11008,352,0,0,225,226,224,227,0,4704],\"FLAG\":0,\"BASE\":18}"
+#define USER_TEMPLATE "{\"NAME\":\"Valve Controls\",\"GPIO\":[192,0,320,11168,11136,352,0,0,225,226,224,227,0,4704],\"FLAG\":0,\"BASE\":18}"
 #endif
 #else
 #ifdef ESP8266

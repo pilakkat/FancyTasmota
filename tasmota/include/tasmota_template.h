@@ -230,6 +230,7 @@ enum UserSelectablePins {
   GPIO_TM1640CLK, GPIO_TM1640DIN,       // TM1640 (16 x seven-segment LED controler)
   GPIO_TWAI_TX, GPIO_TWAI_RX, GPIO_TWAI_BO, GPIO_TWAI_CLK,  // ESP32 TWAI serial interface
 #ifdef USE_SOFTNERCTL
+  /* CONFLICTS must be resolved after this line to avoid loosing config! */
   GPIO_TEMPTY, GPIO_TMED, GPIO_TFULL,
 #endif
   GPIO_SENSOR_END };
