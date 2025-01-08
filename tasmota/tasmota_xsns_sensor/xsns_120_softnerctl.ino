@@ -747,8 +747,11 @@ void CheckTimeWindow(void) {
     if (RtcTime.valid) {
         bitWrite(softnersensors.specialtimes,4,bitRead(softnersensors.specialtimes,0)); //bit4 = bit0_old
         
+        if (REGENLOCKSTART > REGENLOCKEND) {//overnight scenario
+            bitWrite(softnersensors.specialtimes,0,(RtcTime.hour >= REGENLOCKSTART) || (RtcTime.hour <= REGENLOCKEND));                     //bit0 = regen window - no filling (12 - 6AM)
+        } else {
             bitWrite(softnersensors.specialtimes,0,(RtcTime.hour >= REGENLOCKSTART) && (RtcTime.hour <= REGENLOCKEND));                     //bit0 = regen window - no filling (12 - 6AM)
-        
+        }
         bitWrite(softnersensors.specialtimes,1,(RtcTime.hour == TOPUPHOUR));  
     } else {
         softnersensors.specialtimes = 0;
