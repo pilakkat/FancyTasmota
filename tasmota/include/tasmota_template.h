@@ -230,7 +230,7 @@ enum UserSelectablePins {
   GPIO_TM1640CLK, GPIO_TM1640DIN,       // TM1640 (16 x seven-segment LED controler)
   GPIO_TWAI_TX, GPIO_TWAI_RX, GPIO_TWAI_BO, GPIO_TWAI_CLK,  // ESP32 TWAI serial interface
 #ifdef USE_SOFTNERCTL
-  GPIO_TEMPTY, GPIO_TMED, GPIO_TFULL,
+  GPIO_TEMPTY, GPIO_TMED, GPIO_TFULL,GPIO_SREGEN,
 #endif
   GPIO_SENSOR_END };
 
@@ -509,7 +509,7 @@ const char kSensorNames[] PROGMEM =
   D_SENSOR_TM1640_CLK "|" D_SENSOR_TM1640_DIN "|"
   D_SENSOR_TWAI_TX "|" D_SENSOR_TWAI_RX "|" D_SENSOR_TWAI_BO "|" D_SENSOR_TWAI_CLK
 #ifdef USE_SOFTNERCTL
-  "|Level Low|Level Medium|Level Full"
+  "|Level Low|Level Medium|Level Full|Regeneration"
 #endif
   ;
 
@@ -1258,6 +1258,7 @@ const uint16_t kGpioNiceList[] PROGMEM = {
 AGPIO(GPIO_TEMPTY),
 AGPIO(GPIO_TMED),
 AGPIO(GPIO_TFULL),
+AGPIO(GPIO_SREGEN),
 #endif
 
 /*-------------------------------------------------------------------------------------------*\
