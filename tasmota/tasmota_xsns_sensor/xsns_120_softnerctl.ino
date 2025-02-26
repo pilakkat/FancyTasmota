@@ -143,7 +143,6 @@ struct SensorLocals {
     uint8_t specialtimes = 0; /* bit0: regen inhibit, bit1: topup, bit4=bit0 old */
     uint8_t filldes = 0; /* bit0: autofill hysteresis, bit1: topup request, bit2: external event, bit5=bit1 processed */
     bool flushstate_old;
-    bool valid=false;
     bool tankfilling=false;
     bool tanklevelvalid=false;
     bool ext_override_active = false;
@@ -361,19 +360,30 @@ bool SoftDebounce16(bool x, uint16_t tion, uint16_t tioff, uint16_t* state) {
 }
 
 
+uint8_t calculateBand(uint16_t adcValue) {
+    // Define the band boundaries
+    const uint16_t bandBoundaries[] = {280, 306, 336, 373, 435, 515, 611, 751, 928};
+    const int numBoundaries = sizeof(bandBoundaries) / sizeof(bandBoundaries[0]);
+    
+    // Check each boundary in sequence
+    for (int i = 0; i < numBoundaries; i++) {
+        if (adcValue < bandBoundaries[i]) {
+            return i; // Return band number (0-8)
+        }
+    }
+    
+    // If we've gone through all boundaries, it must be band 9 (SCB)
+    return numBoundaries;
+}
 
 
 /*********************************************************************************************/
 void SoftnerCtlInit(void) {
-    uint8_t scount = 0;
-    if (PinUsed(GPIO_TEMPTY)) {pinMode(Pin(GPIO_TEMPTY), INPUT_PULLUP);scount++;}
-    if (PinUsed(GPIO_TMED)) {pinMode(Pin(GPIO_TMED), INPUT_PULLUP);scount++;}
-    if (PinUsed(GPIO_TFULL)) {pinMode(Pin(GPIO_TFULL), INPUT_PULLUP);scount++;}
-   /* if (PinUsed(GPIO_SOFTNER)) {AdcAttach(Pin(GPIO_SOFTNER), ADC_INPUT);scount++;}
-    for (uint8_t i=0;i<=3;i++) {
-        if (PinUsed(GPIO_LVL, i)) {pinMode(Pin(GPIO_LVL), INPUT_PULLUP);scount++;}
-    }*/
-    softnersensors.valid = (bool)(scount>0);
+    if (PinUsed(GPIO_TEMPTY)) {pinMode(Pin(GPIO_TEMPTY), INPUT_PULLUP);}
+    if (PinUsed(GPIO_TMED)) {pinMode(Pin(GPIO_TMED), INPUT_PULLUP);}
+    if (PinUsed(GPIO_TFULL)) {pinMode(Pin(GPIO_TFULL), INPUT_PULLUP);}
+    if (PinUsed(GPIO_SREGEN)) {pinMode(Pin(GPIO_SREGEN), INPUT_PULLUP);}
+
     softnersensors.flushstate_old=false;
     /* Default debounce values */
     softnerparams.deb_limit[TEMPTY] = (5<<8) | 5;     //2s both directions
@@ -543,46 +553,58 @@ void MonitorCountDown(void) {
 void TankSensorProbe50ms(void) {
     uint8_t idx;
     if (!softnerparams.testmode) {
-        if (PinUsed(GPIO_TEMPTY)) {bitWrite(softnersensors.raw_state,TEMPTY,!digitalRead(Pin(GPIO_TEMPTY)));} 
-        if (PinUsed(GPIO_TMED)) {bitWrite(softnersensors.raw_state,TMED,!digitalRead(Pin(GPIO_TMED)));} 
-        if (PinUsed(GPIO_TFULL)) {bitWrite(softnersensors.raw_state,TFULL,!digitalRead(Pin(GPIO_TFULL)));} 
-
-        if (PinUsed(GPIO_ADC_INPUT)) {
+        if (PinUsed(GPIO_SREGEN)) {bitWrite(softnersensors.raw_state,SOFTNER,!digitalRead(Pin(GPIO_SREGEN)));}
+        
+        if (PinUsed(GPIO_TEMPTY) && PinUsed(GPIO_TMED) && PinUsed(GPIO_TFULL)) {
+            bitWrite(softnersensors.raw_state,TEMPTY,!digitalRead(Pin(GPIO_TEMPTY)));
+            bitWrite(softnersensors.raw_state,TMED,!digitalRead(Pin(GPIO_TMED)));
+            bitWrite(softnersensors.raw_state,TFULL,!digitalRead(Pin(GPIO_TFULL)));
+        } else if (PinUsed(GPIO_ADC_INPUT)) {
             uint16_t newvalue = analogRead(Pin(GPIO_ADC_INPUT));
             softnersensors.adc_value = newvalue;
-            /* 2 DIG input reading via ADC and resistor array */
-            if (newvalue < 180) {
-                /* SCG */           
-                bitSet(softnersensors.errorstates,ERROR_ADCSRCMIN);
-                bitClear(softnersensors.errorstates,ERROR_ADCSRCMAX);
-                bitClear(softnersensors.raw_state,TEMPTY);
-                bitClear(softnersensors.raw_state,SOFTNER);
-            } else if (newvalue < 330) {
-                bitSet(softnersensors.raw_state,TEMPTY);
-                bitClear(softnersensors.raw_state,SOFTNER);
-                bitClear(softnersensors.errorstates,ERROR_ADCSRCMIN);
-                bitClear(softnersensors.errorstates,ERROR_ADCSRCMAX);
-            } else if (newvalue < 525) {
-                bitClear(softnersensors.raw_state,TEMPTY);
-                bitClear(softnersensors.raw_state,SOFTNER);
-                bitClear(softnersensors.errorstates,ERROR_ADCSRCMIN);
-                bitClear(softnersensors.errorstates,ERROR_ADCSRCMAX);
-            } else if (newvalue < 727) {
-                bitSet(softnersensors.raw_state,TEMPTY);
-                bitSet(softnersensors.raw_state,SOFTNER);
-                bitClear(softnersensors.errorstates,ERROR_ADCSRCMIN);
-                bitClear(softnersensors.errorstates,ERROR_ADCSRCMAX);
-            } else if (newvalue < 920) {
-                bitClear(softnersensors.raw_state,TEMPTY);
-                bitSet(softnersensors.raw_state,SOFTNER);
-                bitClear(softnersensors.errorstates,ERROR_ADCSRCMIN);
-                bitClear(softnersensors.errorstates,ERROR_ADCSRCMAX);
-            } else {
-                /* SCB */
-                bitClear(softnersensors.raw_state,TEMPTY);
-                bitClear(softnersensors.raw_state,SOFTNER);
-                bitClear(softnersensors.errorstates,ERROR_ADCSRCMIN);
-                bitSet(softnersensors.errorstates,ERROR_ADCSRCMAX);
+            /* 3 DIG input reading via ADC and resistor array */
+            uint8_t adc_band = calculateBand(newvalue);
+            
+            bitClear(softnersensors.errorstates,ERROR_ADCSRCMIN);
+            bitClear(softnersensors.errorstates,ERROR_ADCSRCMAX);
+            bitClear(softnersensors.raw_state,TEMPTY);
+            bitClear(softnersensors.raw_state,TMED);
+            bitClear(softnersensors.raw_state,TFULL);
+            switch(adc_band) { //S1-S2-S3: F-M-E -> * => Probable combinations
+                case 0: //SCG
+                    bitSet(softnersensors.errorstates,ERROR_ADCSRCMIN);
+                    break;
+                case 1: //FME:000 *
+                    break;
+                case 2: //FME:100
+                    bitSet(softnersensors.raw_state,TFULL);
+                    break;
+                case 3: //FME:010
+                    bitSet(softnersensors.raw_state,TMED);
+                    break;
+                case 4: //FME:110
+                    bitSet(softnersensors.raw_state,TFULL);
+                    bitSet(softnersensors.raw_state,TMED);
+                    break;
+                case 5: //FME:001 *
+                    bitSet(softnersensors.raw_state,TEMPTY);
+                    break;
+                case 6: //FME:101
+                    bitSet(softnersensors.raw_state,TEMPTY);
+                    bitSet(softnersensors.raw_state,TFULL);
+                    break;
+                case 7: //FME:011 *
+                    bitSet(softnersensors.raw_state,TMED);
+                    bitSet(softnersensors.raw_state,TEMPTY);
+                    break;
+                case 8: //FME:111 *
+                    bitSet(softnersensors.raw_state,TEMPTY);
+                    bitSet(softnersensors.raw_state,TMED);
+                    bitSet(softnersensors.raw_state,TFULL);
+                    break;
+                default: //SCB
+                    bitSet(softnersensors.errorstates,ERROR_ADCSRCMAX);
+                    break;
             }
         }
     } else {
