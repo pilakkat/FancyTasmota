@@ -362,7 +362,8 @@ bool SoftDebounce16(bool x, uint16_t tion, uint16_t tioff, uint16_t* state) {
 
 uint8_t calculateBand(uint16_t adcValue) {
     // Define the band boundaries
-    const uint16_t bandBoundaries[] = {280, 306, 336, 373, 435, 515, 611, 751, 928};
+   // const uint16_t bandBoundaries[] = {280, 306, 336, 373, 435, 515, 611, 751, 928};
+    const uint16_t bandBoundaries[] = {201, 385, 574, 751, 928}; //usefulbands: [SCG, 000, 100, 110, 111, SCB]
     const int numBoundaries = sizeof(bandBoundaries) / sizeof(bandBoundaries[0]);
     
     // Check each boundary in sequence
@@ -383,6 +384,7 @@ void SoftnerCtlInit(void) {
     if (PinUsed(GPIO_TMED)) {pinMode(Pin(GPIO_TMED), INPUT_PULLUP);}
     if (PinUsed(GPIO_TFULL)) {pinMode(Pin(GPIO_TFULL), INPUT_PULLUP);}
     if (PinUsed(GPIO_SREGEN)) {pinMode(Pin(GPIO_SREGEN), INPUT_PULLUP);}
+    if (PinUsed(GPIO_ADC_INPUT)) {softnersensors.adc_value = (uint16_t)AdcRead(Pin(GPIO_ADC_INPUT),1);}
 
     softnersensors.flushstate_old=false;
     /* Default debounce values */
@@ -550,6 +552,13 @@ void MonitorCountDown(void) {
     }
 }
 
+void SenseAdc250ms(void) {
+    /* Read ADC slower to avoid too much variations */
+    if (PinUsed(GPIO_ADC_INPUT)) {
+        softnersensors.adc_value = (uint16_t)AdcRead(Pin(GPIO_ADC_INPUT),3); //average of 8 samples. 8ms delay. 
+    }
+}
+
 void TankSensorProbe50ms(void) {
     uint8_t idx;
     if (!softnerparams.testmode) {
@@ -560,8 +569,7 @@ void TankSensorProbe50ms(void) {
             bitWrite(softnersensors.raw_state,TMED,!digitalRead(Pin(GPIO_TMED)));
             bitWrite(softnersensors.raw_state,TFULL,!digitalRead(Pin(GPIO_TFULL)));
         } else if (PinUsed(GPIO_ADC_INPUT)) {
-            uint16_t newvalue = analogRead(Pin(GPIO_ADC_INPUT));
-            softnersensors.adc_value = newvalue;
+            uint16_t newvalue = softnersensors.adc_value;
             /* 3 DIG input reading via ADC and resistor array */
             uint8_t adc_band = calculateBand(newvalue);
             
@@ -576,7 +584,7 @@ void TankSensorProbe50ms(void) {
                     break;
                 case 1: //FME:000 *
                     break;
-                case 2: //FME:100
+              /*  case 2: //FME:100
                     bitSet(softnersensors.raw_state,TFULL);
                     break;
                 case 3: //FME:010
@@ -585,19 +593,19 @@ void TankSensorProbe50ms(void) {
                 case 4: //FME:110
                     bitSet(softnersensors.raw_state,TFULL);
                     bitSet(softnersensors.raw_state,TMED);
-                    break;
-                case 5: //FME:001 *
+                    break; */
+                case 2: //FME:001 *
                     bitSet(softnersensors.raw_state,TEMPTY);
                     break;
-                case 6: //FME:101
+            /*    case 6: //FME:101
                     bitSet(softnersensors.raw_state,TEMPTY);
                     bitSet(softnersensors.raw_state,TFULL);
-                    break;
-                case 7: //FME:011 *
+                    break;*/
+                case 3: //FME:011 *
                     bitSet(softnersensors.raw_state,TMED);
                     bitSet(softnersensors.raw_state,TEMPTY);
                     break;
-                case 8: //FME:111 *
+                case 4: //FME:111 *
                     bitSet(softnersensors.raw_state,TEMPTY);
                     bitSet(softnersensors.raw_state,TMED);
                     bitSet(softnersensors.raw_state,TFULL);
@@ -1779,6 +1787,7 @@ bool Xsns120(uint32_t function) {
             return true;
             break;
         case FUNC_EVERY_250_MSECOND:
+            SenseAdc250ms();
             SenseFlush250ms();
             UpdateSensors250ms();
             return true;
