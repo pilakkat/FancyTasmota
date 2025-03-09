@@ -1029,7 +1029,7 @@ void DryRunMonitor(void) {
 
 String GetFlowMeterCal() {
     String html = "<h3>Flow Sensor Calibration</h3>";
-    html += "<form action='/update' method='post'>";
+    html += "<form action='/calup' method='post'>";
     html += "<table border='1' cellspacing='2' cellpadding='4'>";
     for (int r = 0; r < 2; r++) {
       html += "<tr>";
@@ -1051,8 +1051,17 @@ String GetFlowMeterCal() {
     html += "<br><button type='submit' style='height:40px;'>Update Values</button>";
     html += "</form>";
     return html;
-  }
-  
+}
+
+#ifdef USE_WEBSERVER
+void AddFlowSensorConfig() {
+    if (softnersensors.calibreq) {
+        String page = GetFlowMeterCal();
+        const char* pageCStr = page.c_str();
+        WSContentSend_P(PSTR("%s"),pageCStr);
+    }
+}
+#endif
 
 void ShowLevelAndStates(bool json) {
     if(json) {
@@ -1132,9 +1141,6 @@ void ShowLevelAndStates(bool json) {
       WSContentSend_P(PSTR("{s}%s{m} %d %d %d{e}"), "Valve State", bitRead(softnersensors.valvestate,2),bitRead(softnersensors.valvestate,1),bitRead(softnersensors.valvestate,0));
       WSContentSend_P(PSTR("{s}%s{m} %s{e}"), "Calibration Mode", (softnersensors.calibreq?"active":"not active"));
       if (softnersensors.calibreq) {
-        String page = GetFlowMeterCal();
-        const char* pageCStr = page.c_str();
-        WSContentSend_P(PSTR("%s"),pageCStr);
         WSContentSend_P(PSTR("{s}%s{m} %d %s{e}"), "Cal Deviation/Validity", softnersensors.calibdeviations, (softnersensors.calibvalid?"valid":"invalid"));
       }
       if (softnersensors.calibavgpps > 0) {
@@ -1528,8 +1534,7 @@ void CmndSoftnerConfig() {
 void HandleFlowSensorCal() {
     /* Called when user updates cal values */
     if (!HttpCheckPriviledgedAccess()) { return; }
-    float lookupTable[2][6];
-
+    
     // Loop through your table dimensions and update your stored values.
     for (int r = 0; r < 2; r++) {
         for (int c = 0; c < 6; c++) {
@@ -1540,7 +1545,7 @@ void HandleFlowSensorCal() {
                 // Convert to float (or any type you need)
                 float parsedVal = val.toFloat();
                 // Update your lookup table storage, e.g.,
-                lookupTable[r][c] = parsedVal;
+                softnerparams.ctPulsePerLNorm_T[r*PULSERATE_TABLE_SIZE+c+1] = parsedVal;
             }
         }
     }
@@ -1975,6 +1980,9 @@ bool Xsns120(uint32_t function) {
             break;
         case FUNC_WEB_ADD_HANDLER:
             WebServer_on(PSTR("/calup"), HandleFlowSensorCal, HTTP_POST);
+            break;
+        case FUNC_WEB_ADD_BUTTON:
+            AddFlowSensorConfig();
             break;
     #endif  // USE_WEBSERVER    
         case FUNC_COMMAND:
