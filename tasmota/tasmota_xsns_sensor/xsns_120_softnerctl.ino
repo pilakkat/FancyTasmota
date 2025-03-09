@@ -715,7 +715,6 @@ void WaterModelInitVolume(uint8_t idx, bool deb) {
                         softnersensors.calibvolumeerr = softnersensors.calibmeasuredvol-expectedvol;   //-ve=>too slow counting, +ve=>too fast counting
                         softnersensors.calibavgppl = (float)softnersensors.calibcount/expectedvol; //pulse per litter actual
                     }
-                    softnersensors.calibreq=false;
                     InitFlowFactor();
                 } else if (GET_DEBSTATE(TEMPTY)) {
                     softnersensors.watervolume = (float)softnerparams.sensorlevels[0];
@@ -781,8 +780,8 @@ void WaterFlowSensor(void) {
                     softnersensors.calibvalid=false;
                 }
             } 
-            //Calculate Exponentially Weighted Moving Average (alpha = 0.01 : 100 sample memory)
-            softnersensors.calibavgpps = 0.01*ctrdelta + 0.99*softnersensors.calibavgpps; 
+            //Calculate Exponentially Weighted Moving Average (alpha = 0.004 : 250 sample memory ~ 4.1 minutes)
+            softnersensors.calibavgpps = 0.004*ctrdelta + 0.996*softnersensors.calibavgpps; 
         } else {
             softnersensors.calibavgpps = (float)ctrdelta; //first value
         }
