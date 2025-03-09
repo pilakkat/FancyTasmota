@@ -406,13 +406,20 @@ void SoftnerPulseNormInit(void) {
         if (SOFTNER_PPLNORMFLAGS(i)) {
             uint16_t x = (Settings->softner_ctPPLNorm_T[i] & 0x7F)*3;
             uint16_t y = (Settings->softner_ctPPLNorm_T[PULSERATE_TABLE_SIZE+i]*2);  
-            softnerparams.ctPulsePerLNorm_T[i] = (float)x;
-            softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+i] = (float)y;
+            softnerparams.ctPulsePerLNorm_T[i+1] = (float)x;
+            softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+i+1] = (float)y;
         } else {
             /* Store default values in increasing X order */
-            Settings->softner_ctPPLNorm_T[i] = ((((uint8_t)(softnerparams.ctPulsePerLNorm_T[i]/3)&0x7F)<<1)|0x1);
-            Settings->softner_ctPPLNorm_T[PULSERATE_TABLE_SIZE+i] = (uint8_t)(softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+i]/2);
+            Settings->softner_ctPPLNorm_T[i] = (((uint8_t)(softnerparams.ctPulsePerLNorm_T[i+1]/3)&0x7F)|0x80);
+            Settings->softner_ctPPLNorm_T[PULSERATE_TABLE_SIZE+i] = (uint8_t)(softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+i+1]/2);
         }
+    }
+}
+
+void SoftnerPulseNormSave() {
+    for(uint8_t i=0;i<PULSERATE_TABLE_SIZE;i++) {
+        Settings->softner_ctPPLNorm_T[i] = (((uint8_t)(softnerparams.ctPulsePerLNorm_T[i+1]/3)&0x7F)|0x80);
+        Settings->softner_ctPPLNorm_T[PULSERATE_TABLE_SIZE+i] = (uint8_t)(softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+i+1]/2);
     }
 }
 
@@ -1028,11 +1035,16 @@ void DryRunMonitor(void) {
 }
 
 String GetFlowMeterCal() {
-    String html = "<h3>Flow Sensor Calibration</h3>";
+    String html = "<div>";
+    html += "<h3 style='padding:0px;margin:0px'>Flow Sensor Calibration</h3>";
     html += "<form action='/calup' method='post'>";
-    html += "<table border='1' cellspacing='2' cellpadding='4'>";
+    html += "<table border='1' cellspacing='2' cellpadding='0'>";
     for (int r = 0; r < 2; r++) {
-      html += "<tr>";
+      if (r==0) {
+        html += "<tr><td>Pulse/S</td>";
+      } else {
+        html += "<tr><td>Pulse/L</td>";
+      }
       for (int c = 0; c < 6; c++) {
         char fieldName[16],curValue[16];
         sprintf(fieldName, "lut_%d_%d", r, c);
@@ -1048,8 +1060,12 @@ String GetFlowMeterCal() {
       html += "</tr>";
     }
     html += "</table>";
-    html += "<br><button type='submit' style='height:40px;'>Update Values</button>";
+    html += "<button type='submit'>Update Sensor Calibration</button>";
     html += "</form>";
+    html += "<p></p>";
+    html += "<form action='/calrst' method='post'><button type='submit'>Reset Calibration to Default</button></form>";
+    html += "<p></p><div></div>";
+
     return html;
 }
 
@@ -1549,6 +1565,16 @@ void HandleFlowSensorCal() {
             }
         }
     }
+    SoftnerPulseNormSave();
+    HandleConfiguration();
+}
+
+void HandleFlowSensorRst() {
+    for (int i = 0; i < PULSERATE_TABLE_SIZE; i++) {
+        Settings->softner_ctPPLNorm_T[i] = 0;
+    }
+    SoftnerPulseNormInit();
+    HandleConfiguration();
 }
 #endif
 
@@ -1980,6 +2006,7 @@ bool Xsns120(uint32_t function) {
             break;
         case FUNC_WEB_ADD_HANDLER:
             WebServer_on(PSTR("/calup"), HandleFlowSensorCal, HTTP_POST);
+            WebServer_on(PSTR("/calrst"), HandleFlowSensorRst, HTTP_POST);
             break;
         case FUNC_WEB_ADD_BUTTON:
             AddFlowSensorConfig();
