@@ -1088,6 +1088,20 @@ void ShowLevelAndStates(bool json) {
       WSContentSend_P(PSTR("{s}%s{m} %s%s{e}"), "Delta Volume ", vd, "L");
       WSContentSend_P(PSTR("{s}%s{m} %s%s{e}"), "Water Flow ", fr, "LPM");
       WSContentSend_P(PSTR("{s}%s{m} %d %d %d{e}"), "Valve State", bitRead(softnersensors.valvestate,2),bitRead(softnersensors.valvestate,1),bitRead(softnersensors.valvestate,0));
+      WSContentSend_P(PSTR("{s}%s{m} %s{e}"), "Calibration Mode", (softnersensors.calibreq?"active":"not active"));
+      WSContentSend_P(PSTR("{s}%s{m} %d %s{e}"), "Cal Deviation/Validity", softnersensors.calibdeviations, (softnersensors.calibvalid?"valid":"invalid"));
+      if (softnersensors.calibavgpps > 0) {
+        dtostrfd((double)(softnersensors.calibavgpps), 0, pr);
+        WSContentSend_P(PSTR("{s}%s{m} %s%s{e}"), "Avg pulse rate",pr,"/s");
+      }
+      if (softnersensors.calibavgppl > 0) {
+        dtostrfd((double)(softnersensors.calibavgppl), 0, pl);
+        WSContentSend_P(PSTR("{s}%s{m} %s%s{e}"), "Avg pulse/lit",pl,"/L");
+      }
+      if (softnersensors.calibvolumeerr > 0) {
+        dtostrfd((double)(softnersensors.calibvolumeerr), 1, vd);
+        WSContentSend_P(PSTR("{s}%s{m} %s%s{e}"), "Volume Error",vd,"L");
+      }
 #endif  // USE_WEBSERVER
     }
 }
