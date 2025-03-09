@@ -47,12 +47,12 @@ const char HTTP_SOFTNERCTL_INFO[]           PROGMEM = "{s}%s{m} %d%s{e}";
 const char kSoftnerCommands[] PROGMEM = "|"  // Prefix
   "SoftnerCommands|SensorDebounce|FlowFactor|"
   "TankStats|TankLimit|ValveLimit|SoftnerInit|"
-  "TimerEvent|Routine|ReadRoutine|SoftnerConfig|TestMode" ;
+  "TimerEvent|Routine|ReadRoutine|SoftnerConfig|TestMode|SoftnerCalib" ;
 
 void (* const SoftnerCommand[])(void) PROGMEM = {
   &CmndSoftnerCommands,&CmndSensorDeb,&CmndFlowFactor,
   &CmndTankStats,&CmndTankLimit,&CmndValveLimit,&CmndSoftnerInit,
-  &CmndTimerEvent,&CmndRoutine,&CmndReadRoutine,&CmndSoftnerConfig,&CmndTestMode};
+  &CmndTimerEvent,&CmndRoutine,&CmndReadRoutine,&CmndSoftnerConfig,&CmndTestMode,&CmndCalib};
 
 enum SoftnerStates {
     ERROR_DRYRUN=0,
@@ -116,6 +116,11 @@ struct SensorLocals {
     float voldelta;
     float salt_volume;
     float salt_volume_old;
+    float calibmeasuredvol=0;
+    float calibavgpps=0;
+    float calibavgppl=0;
+    float calibvolumeerr=0;
+    uint32_t calibcountstart=0;
     uint32_t counter_old=0;
     uint16_t relay_countdown[4];
     uint16_t adc_value=0;
@@ -142,6 +147,7 @@ struct SensorLocals {
     uint8_t filltries = 0;
     uint8_t specialtimes = 0; /* bit0: regen inhibit, bit1: topup, bit4=bit0 old */
     uint8_t filldes = 0; /* bit0: autofill hysteresis, bit1: topup request, bit2: external event, bit5=bit1 processed */
+    uint8_t calibdeviations = 0;
     bool flushstate_old;
     bool tankfilling=false;
     bool tanklevelvalid=false;
@@ -149,6 +155,8 @@ struct SensorLocals {
     bool abortfill=false;
     bool firstinit=true;
     bool nofillwindow=false;
+    bool calibreq=false;
+    bool calibvalid=true;
 } softnersensors;
 
 struct SensorParams {
@@ -176,6 +184,7 @@ struct SensorParams {
 #define IS_TESTED(id) ((softnersensors.sensordebstates[id] & DEB16MSK_DEBONCE)!=0)
 #define IS_NEWEVENT(id) ((softnersensors.sensordebstates[id] & DEB16MSK_NEWEVENT)!=0)
 #define SOFTNER_FLAGS(bit) bitRead(Settings->softner_flags,(bit))
+#define SOFTNER_PPLNORMFLAGS(bit) bitRead(Settings->softner_ctPPLNorm_T[bit],7)
 
 float LinearIpo(float x, float* T) {
     /* simple linear ipo rountine 
@@ -379,6 +388,34 @@ uint8_t calculateBand(uint16_t adcValue) {
 
 
 /*********************************************************************************************/
+void SoftnerPulseNormInit(void) {
+    /* Interpolation setting for flow sensor : pulse/sec --> pulse/liter */
+    /* Default Values */
+    softnerparams.ctPulsePerLNorm_T[0] = PULSERATE_TABLE_SIZE;
+    softnerparams.ctPulsePerLNorm_T[1] = 10;  softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+1] = 230;
+    softnerparams.ctPulsePerLNorm_T[2] = 60;  softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+2] = 250;
+    softnerparams.ctPulsePerLNorm_T[3] = 110; softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+3] = 300;
+    softnerparams.ctPulsePerLNorm_T[4] = 160; softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+4] = 380;
+    softnerparams.ctPulsePerLNorm_T[5] = 210; softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+5] = 430;
+    softnerparams.ctPulsePerLNorm_T[6] = 260; softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+6] = 455;
+
+    /* Learned Values: Settings->softner_ctPPLNorm_T[12]: 
+            1-6=>   bit0-6: X axis, resolution 3 (0 to 380 pulse/sec); bit7:validity
+            7-12=>  Y axis, resolution 2 (0-512 pulse/liter) */
+    for(uint8_t i=0;i<PULSERATE_TABLE_SIZE;i++) {
+        if (SOFTNER_PPLNORMFLAGS(i)) {
+            uint16_t x = (Settings->softner_ctPPLNorm_T[i] & 0x7F)*3;
+            uint16_t y = (Settings->softner_ctPPLNorm_T[PULSERATE_TABLE_SIZE+i]*2);  
+            softnerparams.ctPulsePerLNorm_T[i] = (float)x;
+            softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+i] = (float)y;
+        } else {
+            /* Store default values in increasing X order */
+            Settings->softner_ctPPLNorm_T[i] = ((((uint8_t)(softnerparams.ctPulsePerLNorm_T[i]/3)&0x7F)<<1)|0x1);
+            Settings->softner_ctPPLNorm_T[PULSERATE_TABLE_SIZE+i] = (uint8_t)(softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+i]/2);
+        }
+    }
+}
+
 void SoftnerCtlInit(void) {
     if (PinUsed(GPIO_TEMPTY)) {pinMode(Pin(GPIO_TEMPTY), INPUT_PULLUP);}
     if (PinUsed(GPIO_TMED)) {pinMode(Pin(GPIO_TMED), INPUT_PULLUP);}
@@ -425,13 +462,8 @@ void SoftnerCtlInit(void) {
     softnersensors.total_volume_old = softnersensors.total_volume;
     softnersensors.counter_old = CounterPinRead(1);
     /* Interpolation setting for flow sensor : pulse/sec --> pulse/liter */
-    softnerparams.ctPulsePerLNorm_T[0] = PULSERATE_TABLE_SIZE;
-    softnerparams.ctPulsePerLNorm_T[1] = 10;  softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+1] = 230;
-    softnerparams.ctPulsePerLNorm_T[2] = 60;  softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+2] = 250;
-    softnerparams.ctPulsePerLNorm_T[3] = 110; softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+3] = 300;
-    softnerparams.ctPulsePerLNorm_T[4] = 160; softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+4] = 380;
-    softnerparams.ctPulsePerLNorm_T[5] = 210; softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+5] = 430;
-    softnerparams.ctPulsePerLNorm_T[6] = 260; softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+6] = 455;
+    SoftnerPulseNormInit();
+
     /* Average discharge rate for tank */
     softnerparams.disch_rate_T[0]=FLOWRATE_TABLE_SIZE;
     softnerparams.disch_rate_T[1]=5; softnerparams.disch_rate_T[FLOWRATE_TABLE_SIZE+1]=0.001;     //12AM to 5:59AM
@@ -664,8 +696,20 @@ void WaterModelInitVolume(uint8_t idx, bool deb) {
                     softnersensors.watervolume = (float)softnerparams.sensorlevels[1];
                     softnersensors.filltries = 0;
                     softnersensors.abortfill = false;
+                    if(softnersensors.calibreq && softnersensors.calibvalid) { 
+                        uint32_t counterdiff = softnersensors.calibcountstart-softnersensors.counter_old;   //total pulse count
+                        softnersensors.calibmeasuredvol=softnersensors.total_volume-softnersensors.calibmeasuredvol; //total measured volume
+                        float expectedvol = softnerparams.sensorlevels[1]-softnerparams.sensorlevels[0];    //actual volume
+                        softnersensors.calibvolumeerr = softnersensors.calibmeasuredvol-expectedvol;   //-ve=>too slow counting, +ve=>too fast counting
+                        softnersensors.calibavgppl = (float)counterdiff/expectedvol; //pulse per litter actual
+                    }
+                    softnersensors.calibreq=false;
                 } else if (GET_DEBSTATE(TEMPTY)) {
                     softnersensors.watervolume = (float)softnerparams.sensorlevels[0];
+                    if(softnersensors.calibreq) {
+                        softnersensors.calibcountstart=softnersensors.counter_old;
+                        softnersensors.calibmeasuredvol=softnersensors.total_volume;
+                    }
                 } else {
                     softnersensors.watervolume = 0; //practically not supposed to reach here
                 }
@@ -707,6 +751,21 @@ void WaterFlowSensor(void) {
     }
     uint16_t ctrdelta = (uint16_t)(newcounter - softnersensors.counter_old);
     float pulse_per_lit = LinearIpo((float)ctrdelta,softnerparams.ctPulsePerLNorm_T);  //pulse per liter
+    /*If calibration request is present, keep monitoring average values. It should not vary too much. */
+    if(softnersensors.calibreq && softnersensors.calibvalid) {
+        if (softnersensors.calibavgpps>0) {
+            float alloweddeviation = softnersensors.calibavgpps*0.15; //+/- 15% deviation allowed
+            if (ctrdelta<softnersensors.calibavgpps-alloweddeviation || ctrdelta>softnersensors.calibavgpps+alloweddeviation) { 
+                if (++softnersensors.calibdeviations > 20) { //20 variations allowed
+                    softnersensors.calibvalid=false;
+                }
+            }  
+            softnersensors.calibavgpps = (softnersensors.calibavgpps + ctrdelta)/2; //keep average 
+        } else {
+            softnersensors.calibavgpps = (float)ctrdelta; //first value
+        }
+    }
+
     softnersensors.tankfilling = (bool)ctrdelta>0;
     bitWrite(softnersensors.flowstate,0,ctrdelta>0);
     if(bitRead(softnersensors.flowstate,1)!=(ctrdelta>0)) {
@@ -727,7 +786,10 @@ void WaterFlowSensor(void) {
     softnersensors.pulse[0]=ctrdelta;
     softnersensors.pulse[1]=pulse_per_lit;
     if (ctrdelta>0 && pulse_per_lit>0) {
-        float vol_delta = (float)ctrdelta/pulse_per_lit*softnerparams.charge_rate_factor;
+        float vol_delta = (float)ctrdelta/pulse_per_lit;
+        if(!softnersensors.calibreq || !softnersensors.calibvalid) {
+            vol_delta = (float)vol_delta*softnerparams.charge_rate_factor;
+        }
         softnersensors.total_volume += vol_delta;
         softnersensors.mass_flow_rate = vol_delta*60; //since this is @1s raster
         softnersensors.watervolume += vol_delta;
@@ -1447,6 +1509,26 @@ void ReadSoftnerConfig(bool help) {
     }
 }
 
+void CmndCalib() {
+    if (softnersensors.calibreq) {
+        softnersensors.calibreq=false;
+        Response_P(PSTR("{\"%s\":\"Calibration aborted\"}"), XdrvMailbox.command);
+    } else {
+        if (softnersensors.watervolume<(float)softnerparams.sensorlevels[0]) {
+            softnersensors.calibreq=true;
+            softnersensors.calibvalid=true;
+            softnersensors.calibmeasuredvol=0;
+            softnersensors.calibavgpps=0;
+            softnersensors.calibavgppl=0;
+            softnersensors.calibvolumeerr=0;
+            softnersensors.calibcountstart=0;
+            Response_P(PSTR("{\"%s\":\"Calibration mode activated. Close outlets and open manual valve.\"}"), XdrvMailbox.command);
+        } else {
+            Response_P(PSTR("{\"%s\":\"Calibration not possible at current water level. Needs empty tank!\"}"), XdrvMailbox.command);
+        }
+    }
+}
+
 void CmndTestMode() {
     if (XdrvMailbox.data_len) {
         char argument[XdrvMailbox.data_len];
@@ -1558,7 +1640,7 @@ void CmndRoutine(void) {
 }
 
 void CmndSoftnerCommands(void) {
-    Response_P(PSTR("{\"%s\":[\"SensorDebounceX(2)\",\"FlowFactor(2)\",\"TankLimit(2)\",\"TankStats(0)\",\"ValveLimit(4)\",\"Routine(4)\",\"SoftnerConfig(10)\",\"SoftnerInitX(1)\"]}"), XdrvMailbox.command);
+    Response_P(PSTR("{\"%s\":[\"SensorDebounceX(2)\",\"FlowFactor(2)\",\"TankLimit(2)\",\"TankStats(0)\",\"ValveLimit(4)\",\"Routine(4)\",\"SoftnerConfig(10)\",\"SoftnerInitX(1)\",\"SoftnerCalib(0)\"]}"), XdrvMailbox.command);
 }
 
 

@@ -603,7 +603,8 @@ typedef struct {
 #ifdef ESP8266
   uint16_t      gpio16_converted;          // 3D0
 #ifdef USE_SOFTNERCTL
-  uint8_t       free_esp8266_3D2[29];      // 3D2
+  uint8_t       free_esp8266_3D2[17];      // 3D2
+  uint8_t       softner_ctPPLNorm_T[12];   // 3E3
   uint8_t       garden_routines[13];       // 3EF (3 relays x 4 routines + 1 validity)
 #else
   uint8_t       free_esp8266_3D2[42];      // 3D2
