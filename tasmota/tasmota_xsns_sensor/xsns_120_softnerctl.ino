@@ -726,6 +726,7 @@ void WaterModelInitVolume(uint8_t idx, bool deb) {
                 } else if (GET_DEBSTATE(TEMPTY)) {
                     softnersensors.watervolume = (float)softnerparams.sensorlevels[1];
                 } else {
+                    softnersensors.calibreq = false;
                     softnersensors.watervolume = (float)softnerparams.sensorlevels[0];
                 }
             }
