@@ -120,6 +120,7 @@ struct SensorLocals {
     float calibavgpps=0;
     float calibavgppl=0;
     float calibvolumeerr=0;
+    float calibtolerance=0.2; //15% tolerance
     int32_t calibcount=0;
     uint32_t counter_old=0;
     uint16_t relay_countdown[4];
@@ -148,6 +149,7 @@ struct SensorLocals {
     uint8_t specialtimes = 0; /* bit0: regen inhibit, bit1: topup, bit4=bit0 old */
     uint8_t filldes = 0; /* bit0: autofill hysteresis, bit1: topup request, bit2: external event, bit5=bit1 processed */
     uint8_t calibdeviations = 0;
+    uint8_t calibdevmax=30;
     bool flushstate_old;
     bool tankfilling=false;
     bool tanklevelvalid=false;
@@ -774,9 +776,9 @@ void WaterFlowSensor(void) {
     /*If calibration request is present, keep monitoring average values. It should not vary too much. */
     if(softnersensors.calibreq && softnersensors.calibvalid && softnersensors.calibcount) {
         if (softnersensors.calibavgpps>0) {
-            float alloweddeviation = softnersensors.calibavgpps*0.15; //+/- 15% deviation allowed
+            float alloweddeviation = softnersensors.calibavgpps*softnersensors.calibtolerance;
             if (ctrdelta<softnersensors.calibavgpps-alloweddeviation || ctrdelta>softnersensors.calibavgpps+alloweddeviation) { 
-                if (++softnersensors.calibdeviations > 20) { //20 variations allowed
+                if (++softnersensors.calibdeviations > softnersensors.calibdevmax) { 
                     softnersensors.calibvalid=false;
                 }
             } 
@@ -1033,6 +1035,7 @@ void DryRunMonitor(void) {
     }
 }
 
+#ifdef USE_WEBSERVER
 String GetFlowMeterCal() {
     String html = "<div>";
     html += "<h3 style='padding:0px;margin:0px'>Flow Sensor Calibration</h3>";
@@ -1062,18 +1065,46 @@ String GetFlowMeterCal() {
     html += "<button type='submit'>Update Sensor Calibration</button>";
     html += "</form>";
     html += "<p></p>";
-    html += "<form action='/calrst' method='post'><button type='submit'>Reset Calibration to Default</button></form>";
+    html += "<form action='/calrst' method='post' onsubmit=\"return confirm('Confirm Reset Default Values. You cannot undo this operation!');\"><button type='submit'>Reset Calibration to Default</button></form>";
     html += "<p></p><div></div>";
 
     return html;
 }
 
-#ifdef USE_WEBSERVER
+String GetFlowMeterCalBoundary() {
+    String html = "<div>";
+    html += "<form action='/calbound' method='post'>";
+    html += "<label for='tolerance'>Tolerance (10% - 50%):</label>";
+    html += "<input type='range' id='tolerance' name='tolerance' min='10' max='50' value='";
+    html += String(softnersensors.calibtolerance*100);
+    html += "' oninput='this.nextElementSibling.value = this.value'>";
+    html += "<output>";
+    html += String(softnersensors.calibtolerance*100);
+    html += "</output><br>";
+    html += "<label for='max_deviations'>Max Deviations (10 - 100):</label>";
+    html += "<input type='range' id='max_deviations' name='max_deviations' min='10' max='100' value='";
+    html += String(softnersensors.calibdevmax);
+    html += "' oninput='this.nextElementSibling.value = this.value'>";
+    html += "<output>";
+    html += String(softnersensors.calibdevmax);
+    html += "</output><br>";
+    html += "<button type='submit'>Update Calibration Limits</button>";
+    html += "</form>";
+    html += "<p></p><div></div>";
+    return html;
+}
+
 void AddFlowSensorConfig() {
     if (softnersensors.calibreq) {
         String page = GetFlowMeterCal();
         const char* pageCStr = page.c_str();
         WSContentSend_P(PSTR("%s"),pageCStr);
+        page = GetFlowMeterCalBoundary();
+        pageCStr = page.c_str();
+        WSContentSend_P(PSTR("%s"),pageCStr);
+        WSContentSend_P(PSTR("%s"),"<form action='/calreq' method='post'><button type='submit'>Exit Calibration Mode</button></form>");
+    } else {
+        WSContentSend_P(PSTR("%s"),"<form action='/calreq' method='post'><button type='submit'>Activate Calibration Mode</button></form>");
     }
 }
 #endif
@@ -1156,7 +1187,11 @@ void ShowLevelAndStates(bool json) {
       WSContentSend_P(PSTR("{s}%s{m} %d %d %d{e}"), "Valve State", bitRead(softnersensors.valvestate,2),bitRead(softnersensors.valvestate,1),bitRead(softnersensors.valvestate,0));
       WSContentSend_P(PSTR("{s}%s{m} %s{e}"), "Calibration Mode", (softnersensors.calibreq?"active":"not active"));
       if (softnersensors.calibreq) {
-        WSContentSend_P(PSTR("{s}%s{m} %d %s{e}"), "Cal Deviation/Validity", softnersensors.calibdeviations, (softnersensors.calibvalid?"valid":"invalid"));
+        if (softnersensors.calibvalid) {
+            WSContentSend_P(PSTR("{s}%s<td style='color:green';>%d/%d{e}"), "Signal Fluctuations", softnersensors.calibdeviations,softnersensors.calibdevmax);
+        } else {
+            WSContentSend_P(PSTR("{s}%s<td style='color:red';>%d/%d{e}"), "Signal Fluctuations", softnersensors.calibdeviations,softnersensors.calibdevmax);
+        }
       }
       if (softnersensors.calibavgpps > 0) {
         dtostrfd((double)(softnersensors.calibavgpps), 0, pr);
@@ -1546,7 +1581,27 @@ void CmndSoftnerConfig() {
 }
 
 #ifdef USE_WEBSERVER
-void HandleFlowSensorCal() {
+void HandleFlowSensorCalReq() {
+    if (!HttpCheckPriviledgedAccess()) { return; }
+
+    if (softnersensors.calibreq) {
+        softnersensors.calibreq=false;
+        InitFlowFactor();
+    } else {
+        softnersensors.calibreq=true;
+        softnersensors.calibvalid=true;
+        softnersensors.calibmeasuredvol=0;
+        softnersensors.calibavgpps=0;
+        softnersensors.calibavgppl=0;
+        softnersensors.calibvolumeerr=0;
+        softnersensors.calibcount=0;
+        softnersensors.calibdeviations=0;
+        softnerparams.charge_rate_factor=1;//remove corrections for now.      
+    }
+    HandleConfiguration();
+}
+
+void HandleFlowSensorCalSave() {
     /* Called when user updates cal values */
     if (!HttpCheckPriviledgedAccess()) { return; }
     
@@ -1565,6 +1620,29 @@ void HandleFlowSensorCal() {
         }
     }
     SoftnerPulseNormSave();
+    HandleConfiguration();
+}
+
+void HandleFlowSensorCalBoundSave() {
+    /* Called when user updates calibration boundary values */
+    if (!HttpCheckPriviledgedAccess()) { return; }
+
+    if (Webserver->hasArg("tolerance")) {
+        String val = Webserver->arg("tolerance");
+        float parsedVal = val.toFloat();
+        if (parsedVal >= 10 && parsedVal <= 50) {
+            softnersensors.calibtolerance = parsedVal/100;
+        }
+    }
+
+    if (Webserver->hasArg("max_deviations")) {
+        String val = Webserver->arg("max_deviations");
+        int parsedVal = val.toInt();
+        if (parsedVal >= 10 && parsedVal <= 100) {
+            softnersensors.calibdevmax = parsedVal;
+        }
+    }
+
     HandleConfiguration();
 }
 
@@ -2004,8 +2082,10 @@ bool Xsns120(uint32_t function) {
             ShowLevelAndStates(0);
             break;
         case FUNC_WEB_ADD_HANDLER:
-            WebServer_on(PSTR("/calup"), HandleFlowSensorCal, HTTP_POST);
+            WebServer_on(PSTR("/calup"), HandleFlowSensorCalSave, HTTP_POST);
+            WebServer_on(PSTR("/calbound"), HandleFlowSensorCalBoundSave, HTTP_POST);
             WebServer_on(PSTR("/calrst"), HandleFlowSensorRst, HTTP_POST);
+            WebServer_on(PSTR("/calreq"), HandleFlowSensorCalReq, HTTP_POST);
             break;
         case FUNC_WEB_ADD_BUTTON:
             AddFlowSensorConfig();
