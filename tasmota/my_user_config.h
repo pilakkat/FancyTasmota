@@ -271,11 +271,11 @@
 #define TIME_STD_OFFSET        +60               // Offset from UTC in minutes (-780 to +780)
 
 // -- Location ------------------------------------
-#define LATITUDE               48.858360         // [Latitude] Your location to be used with sunrise and sunset
-#define LONGITUDE              2.294442          // [Longitude] Your location to be used with sunrise and sunset
+#define LATITUDE               12.869771         // [Latitude] Your location to be used with sunrise and sunset
+#define LONGITUDE              77.793216         // [Longitude] Your location to be used with sunrise and sunset
 
 // -- Application ---------------------------------
-#define APP_TIMEZONE           1                 // [Timezone] +1 hour (Amsterdam) (-13 .. 14 = hours from UTC, 99 = use TIME_DST/TIME_STD)
+#define APP_TIMEZONE           330               // [Timezone] +1 hour (Amsterdam) (-13 .. 14 = hours from UTC, 99 = use TIME_DST/TIME_STD)
 #define APP_LEDSTATE           LED_POWER         // [LedState] Function of led
                                                  //   (LED_OFF, LED_POWER, LED_MQTTSUB, LED_POWER_MQTTSUB, LED_MQTTPUB, LED_POWER_MQTTPUB, LED_MQTT, LED_POWER_MQTT)
 #define APP_LEDMASK            0xFFFF            // [LedMask] Assign Relay to Power led (0xFFFF is default)
@@ -1418,5 +1418,20 @@
   #define USE_I2S_AAC
   #define USE_I2S_OPUS
 #endif // USE_I2S_ALL
+
+#define USE_TIMEREXP_COMMANDS //issues special commands 'TimerEvent x' natively (no script required)
+
+#ifdef USE_SOFTNERCTL
+#ifndef USE_TIMEREXP_COMMANDS
+#define USE_TIMEREXP_COMMANDS
+#endif
+#ifdef ESP8266
+#define USER_TEMPLATE "{\"NAME\":\"Valve Controls\",\"GPIO\":[192,0,320,11168,11136,352,0,0,225,226,224,227,0,4704],\"FLAG\":0,\"BASE\":18}"
+#endif
+#else
+#ifdef ESP8266
+#define USER_TEMPLATE "{\"NAME\":\"Wemos D1 4N V1.0\",\"GPIO\":[195,0,0,0,194,193,0,0,225,226,224,227,192,0],\"FLAG\":0,\"BASE\":18}" 
+#endif
+#endif
 
 #endif  // _MY_USER_CONFIG_H_
