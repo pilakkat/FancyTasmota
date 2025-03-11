@@ -314,8 +314,9 @@ struct TasmotaGlobal_t {
   bool pwm_present;                         // Any PWM channel configured with SetOption15 0
   bool i2c_enabled[2];                      // I2C configured for all possible buses (1 or 2)
 #ifdef ESP32
+  bool camera_initialized;                  // For esp32-webcam, to be used in discovery
   bool ota_factory;                         // Select safeboot binary
-#endif
+#endif  // ESP32
   bool ntp_force_sync;                      // Force NTP sync
   bool skip_light_fade;                     // Temporarily skip light fading
   bool restart_halt;                        // Do not restart but stay in wait loop
@@ -382,6 +383,7 @@ struct TasmotaGlobal_t {
 #endif  // PIO_FRAMEWORK_ARDUINO_MMU_CACHE16_IRAM48_SECHEAP_SHARED
 
 #ifdef USE_BERRY
+  bool berry_deferred_ready = false;        // is there an deferred Berry function to be called at next millisecond
   bool berry_fast_loop_enabled = false;     // is Berry fast loop enabled, i.e. control is passed at each loop iteration
 #endif  // USE_BERRY
 } TasmotaGlobal = { 0 };

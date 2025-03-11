@@ -234,6 +234,7 @@ Note: the `minimal` variant is not listed as it shouldn't be used outside of the
 | USE_HC8                   | -     | - / - | -     | -     | -     | -     |
 | USE_PIPSOLAR              | -     | - / - | -     | -     | -     | -     |
 | USE_WOOLIIS               | -     | - / - | -     | -     | -     | -     |
+| USE_C8_CO2_5K             | -     | - / - | -     | -     | -     | -     |
 |                           |       |       |       |       |       |       |
 | USE_NRF24                 | -     | - / - | -     | -     | -     | -     |
 | USE_MIBLE                 | -     | - / - | -     | -     | -     | -     |
@@ -244,6 +245,8 @@ Note: the `minimal` variant is not listed as it shouldn't be used outside of the
 | USE_IR_REMOTE             | -     | x / - | x     | x     | x     | x     |
 | USE_IR_RECEIVE            | -     | x / - | x     | x     | x     | x     |
 | USE_IR_REMOTE_FULL        | -     | - / - | -     | -     | x     | -     | Enable ALL protocols        |
+|                           |       |       |       |       |       |       |
+| USE_WIZMOTE               | -     | - / - | -     | -     | -     | -     |
 |                           |       |       |       |       |       |       |
 | USE_SR04                  | -     | - / - | -     | x     | -     | -     |
 | USE_ME007                 | -     | - / - | -     | -     | -     | -     |
