@@ -394,12 +394,12 @@ void SoftnerPulseNormInit(void) {
     /* Interpolation setting for flow sensor : pulse/sec --> pulse/liter */
     /* Default Values */
     softnerparams.ctPulsePerLNorm_T[0] = PULSERATE_TABLE_SIZE;
-    softnerparams.ctPulsePerLNorm_T[1] = 10;  softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+1] = 230;
+    softnerparams.ctPulsePerLNorm_T[1] = 9;  softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+1] = 230;
     softnerparams.ctPulsePerLNorm_T[2] = 60;  softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+2] = 250;
-    softnerparams.ctPulsePerLNorm_T[3] = 110; softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+3] = 300;
-    softnerparams.ctPulsePerLNorm_T[4] = 160; softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+4] = 380;
-    softnerparams.ctPulsePerLNorm_T[5] = 210; softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+5] = 430;
-    softnerparams.ctPulsePerLNorm_T[6] = 260; softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+6] = 455;
+    softnerparams.ctPulsePerLNorm_T[3] = 108; softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+3] = 300;
+    softnerparams.ctPulsePerLNorm_T[4] = 159; softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+4] = 390;
+    softnerparams.ctPulsePerLNorm_T[5] = 192; softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+5] = 466;
+    softnerparams.ctPulsePerLNorm_T[6] = 249; softnerparams.ctPulsePerLNorm_T[PULSERATE_TABLE_SIZE+6] = 600;
 
     /* Learned Values: Settings->softner_ctPPLNorm_T[12]: 
             1-6=>   bit0-6: X axis, resolution 3 (0 to 380 pulse/sec); bit7:validity
@@ -742,7 +742,6 @@ void WaterModelInitVolume(uint8_t idx, bool deb) {
                     softnersensors.calibvalid=true;
                     softnersensors.calibdeviations=0;
                     softnersensors.calibmeasuredvol=0;
-                    softnersensors.calibavgpps=0;
                     softnersensors.calibavgppl=0;
                     softnersensors.calibvolumeerr=0;
                     softnersensors.calibcount=0;
@@ -774,18 +773,27 @@ void WaterFlowSensor(void) {
     uint16_t ctrdelta = (uint16_t)(newcounter - softnersensors.counter_old);
     float pulse_per_lit = LinearIpo((float)ctrdelta,softnerparams.ctPulsePerLNorm_T);  //pulse per liter
     /*If calibration request is present, keep monitoring average values. It should not vary too much. */
-    if(softnersensors.calibreq && softnersensors.calibvalid && softnersensors.calibcount) {
-        if (softnersensors.calibavgpps>0) {
-            float alloweddeviation = softnersensors.calibavgpps*softnersensors.calibtolerance;
-            if (ctrdelta<softnersensors.calibavgpps-alloweddeviation || ctrdelta>softnersensors.calibavgpps+alloweddeviation) { 
-                if (++softnersensors.calibdeviations > softnersensors.calibdevmax) { 
-                    softnersensors.calibvalid=false;
-                }
-            } 
-            //Calculate Exponentially Weighted Moving Average (alpha = 0.004 : 250 sample memory ~ 4.1 minutes)
-            softnersensors.calibavgpps = 0.004*ctrdelta + 0.996*softnersensors.calibavgpps; 
+    if(softnersensors.calibreq && softnersensors.calibvalid) {
+        if (softnersensors.calibmeasuredvol>0) {
+            if (softnersensors.calibavgpps>0) {
+                float alloweddeviation = softnersensors.calibavgpps*softnersensors.calibtolerance;
+                if (ctrdelta<softnersensors.calibavgpps-alloweddeviation || ctrdelta>softnersensors.calibavgpps+alloweddeviation) { 
+                    if (++softnersensors.calibdeviations > softnersensors.calibdevmax) { 
+                        softnersensors.calibvalid=false;
+                    }
+                } 
+                //Calculate Exponentially Weighted Moving Average (alpha = 0.004 : 250 sample memory ~ 4.1 minutes)
+                softnersensors.calibavgpps = 0.004*ctrdelta + 0.996*softnersensors.calibavgpps; 
+            } else {
+                softnersensors.calibavgpps = (float)ctrdelta; //first value
+            }
         } else {
-            softnersensors.calibavgpps = (float)ctrdelta; //first value
+            //not started yet. Waiting for trigger. Calculate average pulse per litter with shorter WMA 
+            if (softnersensors.calibavgpps>0) {
+                softnersensors.calibavgpps = 0.1*ctrdelta + 0.9*softnersensors.calibavgpps; //10 sample memory
+            } else {
+                softnersensors.calibavgpps = (float)ctrdelta; //first value
+            }
         }
     }
 
@@ -1074,20 +1082,24 @@ String GetFlowMeterCal() {
 String GetFlowMeterCalBoundary() {
     String html = "<div>";
     html += "<form action='/calbound' method='post'>";
-    html += "<label for='tolerance'>Tolerance (10% - 50%):</label>";
+    html += "<div style='display: flex; align-items: center;'>";
+    html += "<label for='tolerance' style='margin-right: 10px;width:40%;'>Tolerance %:</label>";
     html += "<input type='range' id='tolerance' name='tolerance' min='10' max='50' value='";
-    html += String(softnersensors.calibtolerance*100);
-    html += "' oninput='this.nextElementSibling.value = this.value'>";
+    html += String(softnersensors.calibtolerance * 100);
+    html += "' oninput='this.nextElementSibling.value = this.value' style='margin-right: 10px;'>";
     html += "<output>";
-    html += String(softnersensors.calibtolerance*100);
-    html += "</output><br>";
-    html += "<label for='max_deviations'>Max Deviations (10 - 100):</label>";
+    html += String((int)(softnersensors.calibtolerance * 100));
+    html += "</output>";
+    html += "</div><br>";
+    html += "<div style='display: flex; align-items: center;'>";
+    html += "<label for='max_deviations' style='margin-right: 10px;width:40%;'>Max Deviations :</label>";
     html += "<input type='range' id='max_deviations' name='max_deviations' min='10' max='100' value='";
     html += String(softnersensors.calibdevmax);
-    html += "' oninput='this.nextElementSibling.value = this.value'>";
+    html += "' oninput='this.nextElementSibling.value = this.value' style='margin-right: 10px;'>";
     html += "<output>";
     html += String(softnersensors.calibdevmax);
-    html += "</output><br>";
+    html += "</output>";
+    html += "</div><br>";
     html += "<button type='submit'>Update Calibration Limits</button>";
     html += "</form>";
     html += "<p></p><div></div>";
