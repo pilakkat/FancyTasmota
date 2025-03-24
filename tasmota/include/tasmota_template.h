@@ -229,11 +229,10 @@ enum UserSelectablePins {
   GPIO_I2C_SER_TX, GPIO_I2C_SER_RX,     // I2C via Serial using SC18IM704 protocol (xdrv74)
   GPIO_TM1640CLK, GPIO_TM1640DIN,       // TM1640 (16 x seven-segment LED controler)
   GPIO_TWAI_TX, GPIO_TWAI_RX, GPIO_TWAI_BO, GPIO_TWAI_CLK,  // ESP32 TWAI serial interface
-  GPIO_C8_CO2_5K_TX, GPIO_C8_CO2_5K_RX, // C8-CO2-5K CO2 Sensor
 #ifdef USE_SOFTNERCTL
-  /* CONFLICTS must be resolved after this line to avoid loosing config! */
   GPIO_TEMPTY, GPIO_TMED, GPIO_TFULL,GPIO_SREGEN,
 #endif
+  GPIO_C8_CO2_5K_TX, GPIO_C8_CO2_5K_RX, // C8-CO2-5K CO2 Sensor
   GPIO_SENSOR_END };
 
 // Error as warning to rethink GPIO usage with max 2045
@@ -510,11 +509,11 @@ const char kSensorNames[] PROGMEM =
   D_SENSOR_I2C_SER_TX "|" D_SENSOR_I2C_SER_RX "|"
   D_SENSOR_TM1640_CLK "|" D_SENSOR_TM1640_DIN "|"
   D_SENSOR_TWAI_TX "|" D_SENSOR_TWAI_RX "|" D_SENSOR_TWAI_BO "|" D_SENSOR_TWAI_CLK "|"
-  D_SENSOR_C8_CO2_5K_TX "|" D_SENSOR_C8_CO2_5K_RX
-  D_SENSOR_TWAI_TX "|" D_SENSOR_TWAI_RX "|" D_SENSOR_TWAI_BO "|" D_SENSOR_TWAI_CLK
 #ifdef USE_SOFTNERCTL
-  "|Level Low|Level Medium|Level Full|Regeneration"
+  "Level Low|Level Medium|Level Full|Regeneration|"
 #endif
+  D_SENSOR_C8_CO2_5K_TX "|" D_SENSOR_C8_CO2_5K_RX "|"
+  D_SENSOR_TWAI_TX "|" D_SENSOR_TWAI_RX "|" D_SENSOR_TWAI_BO "|" D_SENSOR_TWAI_CLK
   ;
 
 const char kSensorNamesFixed[] PROGMEM =
